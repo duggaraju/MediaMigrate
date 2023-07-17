@@ -1,0 +1,20 @@
+﻿table {
+    font-family: ""Courier New"", monspaced;
+}
+
+table, tr, td, th {
+    border: solid black 2px;
+    border-collapse: collapse;
+}
+
+th {
+    text-align: left;
+}
+
+tr:nth-child(even) {
+    background-color: #D6EEEE;
+}
+
+h1 {
+    color: blue;
+}

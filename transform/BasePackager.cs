@@ -1,0 +1,329 @@
+﻿using MediaMigrate.Ams;
+using MediaMigrate.Contracts;
+using MediaMigrate.Pipes;
+using FFMpegCore.Enums;
+using FFMpegCore.Pipes;
+using Microsoft.Extensions.Logging;
+using System.Diagnostics;
+using MediaMigrate.Log;
+
+namespace MediaMigrate.Transform
+{
+    public enum FileType
+    {
+        File,
+        Pipe,
+    }
+
+    public record PackagerOutput(string File, FileType Type)
+    {
+        public string FilePath { get; set; } = File;
+    }
+
+    record PackagerInput(string File, FileType Type, bool TransMux, List<Track> Tracks) : PackagerOutput(File, Type)
+    {
+    }
+
+    abstract class BasePackager : IPackager
+    {
+        public const string MEDIA_FILE = ".mp4";
+        public const string DASH_MANIFEST = ".mpd";
+        public const string HLS_MANIFEST = ".m3u8";
+        public const string VTT_FILE = ".vtt";
+        public const string TRANSCRIPT_SOURCE = "transcriptsrc";
+
+        protected readonly TransMuxer _transMuxer;
+        protected readonly ILogger _logger;
+        protected readonly StorageOptions _options;
+
+        public BasePackager(StorageOptions options, TransMuxer transMuxer, ILogger logger)
+        {
+            _options = options;
+            _transMuxer = transMuxer;
+            _logger = logger;
+        }
+
+        protected virtual FileType GetInputFileType(Manifest manifest) => FileType.File;
+
+        protected virtual FileType GetOutputFileType(Manifest manifest) => FileType.Pipe;
+
+        protected virtual FileType GetManifestFileType(Manifest manifest) => FileType.File;
+
+        protected virtual bool NeedsTransMux(Manifest manifest, ClientManifest? clientManifest)
+        {
+            return clientManifest != null && clientManifest.HasDiscontinuities();
+        }
+
+        protected List<PackagerInput> GetInputs(Manifest manifest, ClientManifest? clientManifest)
+        {
+            var inputs = new List<PackagerInput>();
+            var fileType = GetInputFileType(manifest);
+            var needsTransMux = NeedsTransMux(manifest, clientManifest);
+
+            foreach (var track in manifest.Tracks)
+            {
+                var extension = track.IsMultiFile ? (track is TextTrack ? VTT_FILE : MEDIA_FILE) : string.Empty;
+                var file = $"{track.Source}{extension}";
+                bool transMux = needsTransMux;
+                if (track is TextTrack)
+                {
+                    if (track.Parameters.Any(p => p.Name == "parentTrackName"))
+                    {
+                        continue;
+                    }
+
+                    if (!track.Source.EndsWith(VTT_FILE))
+                    {
+                        var trackFile = track.Parameters.SingleOrDefault(p => p.Name == TRANSCRIPT_SOURCE);
+                        if (trackFile != null)
+                        {
+                            file = trackFile.Value;
+                        }
+                        else
+                        {
+                            transMux = true;
+                        }
+                    }
+                    else
+                    {
+                        transMux = false;
+                    }
+                }
+
+                var item = inputs.Find(i => i.File == file);
+                if (item == default)
+                {
+                    inputs.Add(new PackagerInput(file, fileType, transMux, new List<Track> { track }));
+                }
+                else
+                {
+                    item.Tracks.Add(track);
+                }
+            }
+            return inputs;
+        }
+
+        protected List<PackagerOutput> GetOutputs(Manifest manifest, IList<PackagerInput> inputs)
+        {
+            var baseName = Path.GetFileNameWithoutExtension(manifest.FileName);
+            var fileType = GetOutputFileType(manifest);
+            return inputs.SelectMany(i => i.Tracks)
+                        .Select((t, i) =>
+                        {
+                            var ext = t is TextTrack ? VTT_FILE : MEDIA_FILE;
+                            // TODO: if you want to keep original file names.
+                            // var baseName = Path.GetFileNameWithoutExtension(t.Source);
+                            return new PackagerOutput($"{baseName}_{i}{ext}", fileType);
+                        }).ToList();
+        }
+
+        protected abstract List<PackagerOutput> GetManifests(Manifest manifest, IList<PackagerOutput> outputs);
+
+        public abstract Task PackageAsync(
+            AssetDetails assetDetails,
+            string workingDirectory,
+            IList<PackagerInput> inputFiles,
+            IList<PackagerOutput> outputFiles,
+            IList<PackagerOutput> manifests,
+            CancellationToken cancellationToken);
+
+        protected Process StartProcess(
+            string command,
+            string arguments,
+            Action<int> onExit,
+            Action<string?> stdOut,
+            Action<string?> stdError)
+        {
+            _logger.LogDebug("Starting packager {command}...", command);
+            _logger.LogTrace("Packager arguments: {args}", arguments);
+            var processStartInfo = new ProcessStartInfo(command, arguments)
+            {
+                CreateNoWindow = true,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardInput = true,
+                RedirectStandardError = true
+            };
+
+            var process = new Process
+            {
+                StartInfo = processStartInfo,
+                EnableRaisingEvents = true
+            };
+            process.OutputDataReceived += (s, args) => stdOut(args.Data);
+            process.ErrorDataReceived += (s, args) => stdError(args.Data);
+            process.Exited += (s, args) =>
+            {
+                if (process.ExitCode != 0)
+                {
+                    _logger.LogError("Packager {command} finished with exit code {code}", command, process.ExitCode);
+                }
+                onExit(process.ExitCode);
+                process.Dispose();
+            };
+            try
+            {
+                process.Start();
+                process.BeginOutputReadLine();
+                process.BeginErrorReadLine();
+                return process;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError("Failed to start process {command} with error: {ex}", command, ex);
+                throw;
+            }
+        }
+
+
+        public IPipeSource GetInputSource(AssetDetails assetDetails, PackagerInput input)
+        {
+            var (file, _, transMux, tracks) = input;
+            IPipeSource source;
+            if (tracks.Count == 1 && tracks[0].IsMultiFile)
+            {
+                var track = tracks[0];
+                source = new MultiFileSource(assetDetails.Container, track, assetDetails.ClientManifest!, _logger);
+            }
+            else
+            {
+                source = new BlobSource(assetDetails.Container, file, _logger);
+            }
+
+            if (transMux)
+            {
+                if (tracks[0] is TextTrack)
+                {
+                    source = new TtmlToVttTransmuxer(_transMuxer, source);
+                }
+                else
+                {
+                    var channel = tracks.Count > 1 ? Channel.Both : tracks[0] is AudioTrack ? Channel.Audio : Channel.Video;
+                    source = input.Type == FileType.Pipe ?
+                        new IsmvToCmafMuxer(_transMuxer, source, channel)
+                        : new FfmpegIsmvToMp4Muxer(_transMuxer, source, channel, input.FilePath);
+                }
+            }
+
+            return source;
+        }
+
+        public IPipeSink GetOutputSink(
+            PackagerOutput output,
+            IFileUploader uploader,
+            string pathPrefix)
+        {
+            var file = output.File;
+            var progress = new Progress<long>(p => _logger.LogTrace(Events.BlobUpload, "Uploaded {byte} bytes to {file}", p, file));
+            return new UploadSink(uploader, pathPrefix + file, progress, _logger);
+        }
+
+        private async Task DownloadAsync(AssetDetails assetDetails, PackagerInput input, string workingDirectory, CancellationToken cancellationToken)
+        {
+            input.FilePath = Path.Combine(workingDirectory, input.File);
+            var source = GetInputSource(assetDetails, input);
+
+            if (source is IPipeToFileSource fileSource)
+            {
+                await fileSource.RunAsync(cancellationToken);
+            }
+            else
+            {
+                var sink = new FileSink(input.FilePath, source);
+                await sink.RunAsync(cancellationToken);
+            }
+        }
+
+        public async Task RunAsync(
+            AssetDetails assetDetails,
+            string workingDirectory,
+            IFileUploader uploader,
+            (string Container, string Prefix) outputPath,
+            CancellationToken cancellationToken)
+        {
+            // Create a linked CancellationTokenSource which when disposed cancells all tasks.
+            using var source = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            // TODO: have absolute timeout. source.CancelAfter(TimeSpan.FromHours(1)); 
+            cancellationToken = source.Token;
+
+            var (assetName, _, decryptionInfo, manifest, clientManifest) = assetDetails;
+            using var decryptor = decryptionInfo == null ? null : new Decryptor(decryptionInfo);
+            var allTasks = new List<Task>();
+
+            var inputs = GetInputs(manifest!, clientManifest);
+            var outputs = GetOutputs(manifest!, inputs);
+            var manifests = GetManifests(manifest!, outputs);
+
+            var pipes = new List<Pipe>();
+            foreach (var input in inputs)
+            {
+                var inputSource = GetInputSource(assetDetails, input);
+                var filePath = Path.Combine(workingDirectory, input.File);
+                if (input.Type == FileType.Pipe)
+                {
+                    var pipe = new PipeSource(filePath, inputSource);
+                    filePath = pipe.PipePath;
+                    pipes.Add(pipe);
+                    input.FilePath = filePath;
+                }
+            }
+
+            await Task.WhenAll(inputs
+                .Where(i => i.Type == FileType.File)
+                .Select(i => DownloadAsync(assetDetails, i, workingDirectory, cancellationToken)));
+
+            var outputDirectory = Path.Combine(workingDirectory, "output");
+            Directory.CreateDirectory(outputDirectory);
+
+            var uploads = new List<FileSource>();
+            foreach (var output in outputs.Concat(manifests))
+            {
+                var sink = GetOutputSink(output, uploader, outputPath.Prefix);
+                var filePath = Path.Combine(outputDirectory, output.File);
+                if (output.Type == FileType.Pipe)
+                {
+                    var pipe = new PipeSink(filePath, sink, _logger);
+                    filePath = pipe.PipePath;
+                    pipes.Add(pipe);
+                }
+                else
+                {
+                    uploads.Add(new FileSource(filePath, sink));
+                    output.FilePath = filePath;
+                }
+            }
+
+            _logger.LogTrace("Starting packaging of asset {name}...", assetDetails.AssetName);
+            var task = PackageAsync(
+                assetDetails,
+                outputDirectory,
+                inputs,
+                outputs,
+                manifests,
+                cancellationToken);
+            allTasks.Add(task);
+            allTasks.AddRange(pipes
+                .Select(async p =>
+                {
+                    using (p)
+                    {
+                        await p!.RunAsync(cancellationToken);
+                    }
+                }));
+
+            while (allTasks.Count > 0)
+            {
+                var currentTask = await Task.WhenAny(allTasks);
+                // throw if any task fails.
+                await currentTask;
+                allTasks.Remove(currentTask);
+            }
+
+            _logger.LogTrace("Packaging {asset }finished successfully!", assetDetails.AssetName);
+
+            // Upload any files pending to be uploaded.
+            await Task.WhenAll(uploads.Select(upload => upload.RunAsync(cancellationToken)));
+        }
+    }
+}
+
