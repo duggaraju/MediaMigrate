@@ -51,6 +51,9 @@ namespace MediaMigrate.Contracts
 
         // Check if the track is storead as one file per fragment.
         public bool IsMultiFile => string.IsNullOrEmpty(Path.GetExtension(Source));
+
+        public int TrackId => int.Parse(Parameters.Single(
+            p => "trackID".Equals(p.Name, StringComparison.InvariantCultureIgnoreCase)).Value);
     }
 
     public class VideoTrack : Track

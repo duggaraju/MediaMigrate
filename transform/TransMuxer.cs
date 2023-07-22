@@ -85,9 +85,8 @@ namespace MediaMigrate.Transform
 
         private static string GetCustomArguments(Channel channel, bool dash, bool faststart = true)
         {
-            var frag = channel == Channel.Audio ? "-frag_duration 2 " : string.Empty;
             return dash ?
-                "-movflags +dash+delay_moov+skip_trailer+skip_sidx+frag_keyframe " + frag :
+                "-movflags +dash+delay_moov+skip_trailer+skip_sidx+frag_keyframe  -frag_duration 2" :
                 faststart ? "-movflags faststart" : string.Empty;
         }
 
@@ -116,11 +115,24 @@ namespace MediaMigrate.Transform
             }
             else
             {
-                using var memory = memoryPool.Rent(bytes);
+                var minSize = Math.Min(bytes, 64 * 1024);
+                using var memory = memoryPool.Rent(minSize);
                 while (bytes > 0)
                 {
-                    bytes -= await stream.ReadAsync(memory.Memory.Slice(0, bytes), cancellationToken);
+                    var buffer = memory.Memory.Slice(0, Math.Min(minSize, bytes));
+                    bytes -= await stream.ReadAsync(buffer, cancellationToken);
                 }
+            }
+        }
+
+        public static async Task ReadAsync(Stream stream, Memory<byte> memory, CancellationToken cancellationToken)
+        {
+            var bytes = memory.Length;
+            while (bytes > 0)
+            {
+                var read = await stream.ReadAsync(memory, cancellationToken);
+                memory = memory.Slice(read);
+                bytes -= read;
             }
         }
 
@@ -146,15 +158,13 @@ namespace MediaMigrate.Transform
                 var size = (int)box.Size - 8;
                 if (box.Type == BoxType.MediaDataBox)
                 {
-
                     using var memory = pool.Rent(size);
                     var buffer = memory.Memory.Slice(0, size);
-                    await input.ReadAsync(buffer, cancellationToken);
+                    await ReadAsync(input, buffer, cancellationToken);
                     var stream = buffer.AsStream();
                     var captions = TtmlCaptions.Parse(stream, _logger);
                     foreach (var caption in captions.Body.Captions)
                     {
-
                         if (caption.Start > caption.End)
                         {
 
@@ -172,11 +182,11 @@ namespace MediaMigrate.Transform
             }
         }
 
-        public async Task TransMuxSmoothAsync(Stream source, Stream destination, CancellationToken cancellationToken)
+        public async Task TransMuxSmoothAsync(Stream source, Stream destination, CancellationToken cancellationToken, int? trackId = null)
         {
             var pool = MemoryPool<byte>.Shared;
             var header = new byte[8];
-
+            var skip = false;
             while (true)
             {
                 var bytes = await source.ReadAsync(header, cancellationToken);
@@ -184,29 +194,47 @@ namespace MediaMigrate.Transform
                 var box = BoxFactory.Parse(header.AsSpan());
                 _logger.LogTrace("Found Box {type} size {size}", box.Type.GetBoxName(), box.Size);
                 var size = (int)box.Size;
+                if (box.Type == BoxType.MovieFragmentRandomAccessBox)
+                {
+                    _logger.LogTrace("Skipping box {type} size {size}", box.Type, box.Size);
+                    await SkipAsync(source, size - 8, cancellationToken);
+                    continue;
+                }
                 using var memory = pool.Rent((int)box.Size);
                 var buffer = memory.Memory.Slice(0, size);
                 header.CopyTo(buffer);
-                await source.ReadAsync(buffer.Slice(8), cancellationToken);
+                await ReadAsync(source, buffer.Slice(8), cancellationToken);
                 if (box.Type == BoxType.MovieFragmentBox)
                 {
                     var stream = buffer.AsStream();
                     var moof = (MovieFragmentBox)BoxFactory.Parse(new BoxReader(stream));
-                    foreach (var track in moof.Tracks)
+                    var track = moof.Tracks.Single();
+                    var theader = track.GetSingleChild<TrackFragmentHeaderBox>();
+                    if (theader.TrackId != trackId)
                     {
-                        var tfxd = track.GetChildren<TrackFragmentExtendedHeaderBox>().SingleOrDefault();
-                        if (tfxd != null)
-                        {
-                            var tfdt = new TrackFragmentDecodeTimeBox();
-                            tfdt.BaseMediaDecodeTime = tfxd.Time;
-                            track.Children.Remove(tfxd);
-                            track.Children.Insert(0, tfdt);
-                            moof.ComputeSize();
-                        }
+                        skip = true;
+                        continue;
                     }
+                    else
+                    {
+                        skip = false;
+                    }
+
+                    // Always set version to 1 due to bug in old smooth content.
+                    var trun = track.GetSingleChild<TrackFragmentRunBox>();
+                    trun.Version = 1;
+                    var tfxd = track.GetChildren<TrackFragmentExtendedHeaderBox>().SingleOrDefault();
+                    if (tfxd != null)
+                    {
+                        var tfdt = new TrackFragmentDecodeTimeBox();
+                        tfdt.BaseMediaDecodeTime = tfxd.Time;
+                        track.Children.Remove(tfxd);
+                        track.Children.Insert(0, tfdt);
+                    }
+                    moof.ComputeSize();
                     moof.Write(destination);
                 }
-                else
+                else if (!skip)
                 {
                     await destination.WriteAsync(buffer, cancellationToken);
                 }
@@ -237,12 +265,12 @@ namespace MediaMigrate.Transform
     class IsmvToCmafMuxer : ChainPipeSource
     {
         private readonly TransMuxer _transMuxer;
-        private readonly Channel _channel;
+        private readonly int _trackId;
 
-        public IsmvToCmafMuxer(TransMuxer transMuxer, IPipeSource source, Channel channel) : base(source)
+        public IsmvToCmafMuxer(TransMuxer transMuxer, IPipeSource source, int trackId) : base(source)
         {
             _transMuxer = transMuxer;
-            _channel = channel;
+            _trackId = trackId;
         }
 
         public override string GetStreamArguments() => "-f mp4";
@@ -251,7 +279,7 @@ namespace MediaMigrate.Transform
         {
             using (client)
             {
-                await _transMuxer.TransMuxSmoothAsync(client, destination, cancellationToken);
+                await _transMuxer.TransMuxSmoothAsync(client, destination, cancellationToken, _trackId);
             }
         }
     }

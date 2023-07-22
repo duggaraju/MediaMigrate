@@ -20,6 +20,7 @@ namespace MediaMigrate.Local
         public async Task UploadAsync(
             string fileName,
             Stream content,
+            ContentHeaders headers,
             IProgress<long> progress,
             CancellationToken cancellationToken)
         {

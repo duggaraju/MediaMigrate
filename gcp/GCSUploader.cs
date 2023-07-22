@@ -21,6 +21,7 @@ namespace MediaMigrate.Gcp
         public async Task UploadAsync(
             string fileName,
             Stream content,
+            ContentHeaders headers,
             IProgress<long> progress,
             CancellationToken cancellationToken)
         {
@@ -28,6 +29,8 @@ namespace MediaMigrate.Gcp
             {
                 Bucket = _bucketName,
                 Name = fileName,
+                ContentType = headers.ContentType,
+                ContentLanguage = headers.ContentLanguage
             };
             var gcsProgress = new Progress<IUploadProgress>(p => progress.Report(p.BytesSent));
             await _client.UploadObjectAsync(upload, content, cancellationToken: cancellationToken, progress: gcsProgress);

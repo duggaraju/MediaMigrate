@@ -10,15 +10,18 @@ namespace MediaMigrate.Pipes
         private readonly string _filename;
         private readonly ILogger _logger;
         private readonly IProgress<long> _progress;
+        private readonly ContentHeaders _contentHeaders;
 
         public UploadSink(
             IFileUploader uploader,
             string filename,
+            ContentHeaders headers,
             IProgress<long> progress,
             ILogger logger)
         {
             _uploader = uploader;
             _filename = filename;
+            _contentHeaders = headers;
             _progress = progress;
             _logger = logger;
         }
@@ -30,7 +33,7 @@ namespace MediaMigrate.Pipes
         {
             try
             {
-                await _uploader.UploadAsync(_filename, inputStream, _progress, cancellationToken);
+                await _uploader.UploadAsync(_filename, inputStream, _contentHeaders, _progress, cancellationToken);
             }
             catch (Exception ex)
             {
@@ -42,7 +45,7 @@ namespace MediaMigrate.Pipes
         public async Task UploadAsync(string filename, CancellationToken cancellationToken)
         {
             using var file = File.OpenRead(filename);
-            await _uploader.UploadAsync(_filename, file, _progress, cancellationToken);
+            await _uploader.UploadAsync(_filename, file, _contentHeaders, _progress, cancellationToken);
         }
     }
 }

@@ -61,9 +61,9 @@ namespace MediaMigrate.Pipes
                 }
                 _logger.LogDebug("Finished downloading track {prefix}", _trackPrefix);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _logger.LogError("Failed to download chunk {chunkName} for live stream: {name}. Error: {ex}", chunkName, _trackPrefix, ex);
+                _logger.LogError("Failed to download chunk {chunkName} for live stream: {name}.", chunkName, _trackPrefix);
                 throw;
             }
         }

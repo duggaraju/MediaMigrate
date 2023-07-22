@@ -23,6 +23,7 @@ namespace MediaMigrate.Aws
         public async Task UploadAsync(
             string fileName,
             Stream content,
+            ContentHeaders headers,
             IProgress<long> progress,
             CancellationToken cancellationToken)
         {
@@ -32,7 +33,8 @@ namespace MediaMigrate.Aws
                 Key = fileName,
                 InputStream = content,
                 AutoResetStreamPosition = false,
-                AutoCloseStream = false
+                AutoCloseStream = false,
+                ContentType = headers.ContentType,
             };
             await _client.PutObjectAsync(request, cancellationToken);
         }

@@ -15,13 +15,14 @@ namespace MediaMigrate.Transform
         Pipe,
     }
 
-    public record PackagerOutput(string File, FileType Type)
+    public record PackagerOutput(string File, FileType Type, string? ContentType, string? ContentLanguage)
     {
         public string FilePath { get; set; } = File;
     }
 
-    record PackagerInput(string File, FileType Type, bool TransMux, List<Track> Tracks) : PackagerOutput(File, Type)
+    record PackagerInput(string File, FileType Type, bool TransMux, List<Track> Tracks)
     {
+        public string FilePath { get; set; } = File;
     }
 
     abstract class BasePackager : IPackager
@@ -31,6 +32,12 @@ namespace MediaMigrate.Transform
         public const string HLS_MANIFEST = ".m3u8";
         public const string VTT_FILE = ".vtt";
         public const string TRANSCRIPT_SOURCE = "transcriptsrc";
+
+        public const string HLS_CONTENT_TYPE = "application/vnd.apple.mpegurl";
+        public const string DASH_CONTENT_TYPE = "application/dash+xml";
+        public const string MP4_CONTENT_TYPE = "video/mp4";
+        public const string VTT_CONTENT_TYPE = "text/vtt";
+
 
         protected readonly TransMuxer _transMuxer;
         protected readonly ILogger _logger;
@@ -54,7 +61,7 @@ namespace MediaMigrate.Transform
             return clientManifest != null && clientManifest.HasDiscontinuities();
         }
 
-        protected List<PackagerInput> GetInputs(Manifest manifest, ClientManifest? clientManifest)
+        protected List<PackagerInput> GetInputs(Manifest manifest, ClientManifest? clientManifest, string workingDirectory)
         {
             var inputs = new List<PackagerInput>();
             var fileType = GetInputFileType(manifest);
@@ -91,9 +98,16 @@ namespace MediaMigrate.Transform
                 }
 
                 var item = inputs.Find(i => i.File == file);
-                if (item == default)
+                // for now workaround for smooth input till shaka packager fix goes in.
+                if (item == default || manifest.Format == "fmp4")
                 {
-                    inputs.Add(new PackagerInput(file, fileType, transMux, new List<Track> { track }));
+                    var input = new PackagerInput(file, fileType, transMux, new List<Track> { track })
+                    {
+                        FilePath = Path.Combine(
+                            workingDirectory, 
+                            manifest.Format == "fmp4" ? $"{Path.GetFileNameWithoutExtension(file)}_{track.TrackId}{Path.GetExtension(file)}" : file)
+                    };
+                    inputs.Add(input);
                 }
                 else
                 {
@@ -111,9 +125,10 @@ namespace MediaMigrate.Transform
                         .Select((t, i) =>
                         {
                             var ext = t is TextTrack ? VTT_FILE : MEDIA_FILE;
+                            var contentType = t is TextTrack ? VTT_CONTENT_TYPE : MP4_CONTENT_TYPE;
                             // TODO: if you want to keep original file names.
                             // var baseName = Path.GetFileNameWithoutExtension(t.Source);
-                            return new PackagerOutput($"{baseName}_{i}{ext}", fileType);
+                            return new PackagerOutput($"{baseName}_{i}{ext}", fileType, contentType, t.SystemLanguage);
                         }).ToList();
         }
 
@@ -192,16 +207,21 @@ namespace MediaMigrate.Transform
 
             if (transMux)
             {
-                if (tracks[0] is TextTrack)
+                if (tracks.Count == 1)
                 {
-                    source = new TtmlToVttTransmuxer(_transMuxer, source);
+                    if (tracks[0] is TextTrack)
+                    {
+                        source = new TtmlToVttTransmuxer(_transMuxer, source);
+                    }
+                    else
+                    {
+                        var trackId = tracks[0].TrackId;
+                        source = new IsmvToCmafMuxer(_transMuxer, source, trackId);
+                    }
                 }
                 else
                 {
-                    var channel = tracks.Count > 1 ? Channel.Both : tracks[0] is AudioTrack ? Channel.Audio : Channel.Video;
-                    source = input.Type == FileType.Pipe ?
-                        new IsmvToCmafMuxer(_transMuxer, source, channel)
-                        : new FfmpegIsmvToMp4Muxer(_transMuxer, source, channel, input.FilePath);
+                    source = new FfmpegIsmvToMp4Muxer(_transMuxer, source, Channel.Both, input.FilePath);
                 }
             }
 
@@ -215,12 +235,12 @@ namespace MediaMigrate.Transform
         {
             var file = output.File;
             var progress = new Progress<long>(p => _logger.LogTrace(Events.BlobUpload, "Uploaded {byte} bytes to {file}", p, file));
-            return new UploadSink(uploader, pathPrefix + file, progress, _logger);
+            var headers = new ContentHeaders(output.ContentType, output.ContentLanguage);
+            return new UploadSink(uploader, pathPrefix + file, headers, progress, _logger);
         }
 
         private async Task DownloadAsync(AssetDetails assetDetails, PackagerInput input, string workingDirectory, CancellationToken cancellationToken)
         {
-            input.FilePath = Path.Combine(workingDirectory, input.File);
             var source = GetInputSource(assetDetails, input);
 
             if (source is IPipeToFileSource fileSource)
@@ -250,7 +270,7 @@ namespace MediaMigrate.Transform
             using var decryptor = decryptionInfo == null ? null : new Decryptor(decryptionInfo);
             var allTasks = new List<Task>();
 
-            var inputs = GetInputs(manifest!, clientManifest);
+            var inputs = GetInputs(manifest!, clientManifest, workingDirectory);
             var outputs = GetOutputs(manifest!, inputs);
             var manifests = GetManifests(manifest!, outputs);
 
@@ -258,13 +278,11 @@ namespace MediaMigrate.Transform
             foreach (var input in inputs)
             {
                 var inputSource = GetInputSource(assetDetails, input);
-                var filePath = Path.Combine(workingDirectory, input.File);
                 if (input.Type == FileType.Pipe)
                 {
-                    var pipe = new PipeSource(filePath, inputSource);
-                    filePath = pipe.PipePath;
+                    var pipe = new PipeSource(input.FilePath, inputSource);
                     pipes.Add(pipe);
-                    input.FilePath = filePath;
+                    input.FilePath = pipe.PipePath;
                 }
             }
 

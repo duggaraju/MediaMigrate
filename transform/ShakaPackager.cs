@@ -32,7 +32,7 @@ namespace MediaMigrate.Transform
         // Shaka packager cannot handle smooth input.
         protected override FileType GetInputFileType(Manifest manifest)
         {
-            return manifest.Format == "fmp4" ? FileType.File : FileType.Pipe;
+            return FileType.Pipe;
         }
 
         protected override bool NeedsTransMux(Manifest manifest, ClientManifest? clientManifest)
@@ -140,10 +140,10 @@ namespace MediaMigrate.Transform
 
             var baseName = Path.GetFileNameWithoutExtension(manifest.FileName);
             var manifests = outputs
-                .Select((t, i) => new PackagerOutput($"{baseName}_{i}{HLS_MANIFEST}", fileType))
+                .Select((t, i) => new PackagerOutput($"{baseName}_{i}{HLS_MANIFEST}", fileType, HLS_CONTENT_TYPE, null))
                 .ToList();
-            manifests.Add(new PackagerOutput($"{baseName}{HLS_MANIFEST}", fileType));
-            manifests.Add(new PackagerOutput($"{baseName}{DASH_MANIFEST}", fileType));
+            manifests.Add(new PackagerOutput($"{baseName}{HLS_MANIFEST}", fileType, HLS_CONTENT_TYPE, null));
+            manifests.Add(new PackagerOutput($"{baseName}{DASH_MANIFEST}", fileType, DASH_CONTENT_TYPE, null));
             return manifests;
         }
     }

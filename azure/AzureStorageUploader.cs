@@ -21,7 +21,12 @@ namespace MediaMigrate.Azure
             _logger = logger;
         }
 
-        public async Task UploadAsync(string fileName, Stream content, IProgress<long> progress, CancellationToken cancellationToken)
+        public async Task UploadAsync(
+            string fileName,
+            Stream content,
+            ContentHeaders headers, 
+            IProgress<long> progress,
+            CancellationToken cancellationToken)
         {
             _logger.LogTrace(
                 "Uploading to {fileName} in container {container} of account: {account}...",
@@ -29,6 +34,11 @@ namespace MediaMigrate.Azure
             var blob = _container.GetBlockBlobClient(fileName);
             var options = new BlobUploadOptions
             {
+                HttpHeaders = new BlobHttpHeaders
+                {
+                    ContentType = headers.ContentType,
+                    ContentLanguage = headers.ContentLanguage
+                },
                 ProgressHandler = progress,
                 Conditions = new BlobRequestConditions
                 {

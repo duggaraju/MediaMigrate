@@ -88,15 +88,17 @@ namespace MediaMigrate.Transform
             {
                 using BlobDownloadStreamingResult result = await blob.DownloadStreamingAsync(cancellationToken: cancellationToken);
                 var source = result.Content;
+                var headers = new ContentHeaders(result.Details.ContentType, result.Details.ContentLanguage);
+                var progress = new Progress<long>(progress =>
+                {
+                    _logger.LogTrace("Upload progress for {name}: {progress}", blobName, progress);
+                });
                 if (decryptor != null)
                 {
                     source = decryptor.GetDecryptingReadStream(source, blob.Name);
-                    var progress = new Progress<long>(progress =>
-                    {
-                        _logger.LogTrace("Upload progress for {name}: {progress}", blobName, progress);
-                    });
-                    await fileUploader.UploadAsync(blobName, source, progress, cancellationToken);
                 }
+                using (source)
+                    await fileUploader.UploadAsync(blobName, source, headers, progress, cancellationToken);
             }
         }
     }

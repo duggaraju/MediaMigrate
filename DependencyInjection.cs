@@ -66,13 +66,13 @@ namespace MediaMigrate
                 };
 
                 builder
-                    .SetMinimumLevel(LogLevel.Trace)
+                    .SetMinimumLevel(LogLevel.Debug)
                     .AddFilter(LogFileFilter)
                     .AddSpectreConsole(builder =>
                         builder
                             .SetLogEventFilter(ConsoleFilter)
                             .SetMinimumLevel(options.LogLevel)
-                            .WriteInBackground())
+                            .WriteInForeground())
                     .AddTraceSource(logSwitch, new TextWriterTraceListener(options.LogFile));
             });
             return services;

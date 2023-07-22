@@ -41,18 +41,18 @@ namespace MediaMigrate.Pipes
         public async Task WriteAsync(Stream outputStream, CancellationToken cancellationToken)
         {
             _logger.LogDebug("Begin downloading track: {name}", _blobClient.Name);
-            BlobProperties properties = await _blobClient.GetPropertiesAsync(cancellationToken: cancellationToken);
-            var options = new BlobDownloadOptions
-            {
-                ProgressHandler = new Progress<long>(
-                progress =>
-                {
-                    _logger.LogTrace("Downloaded {bytes}/{total} of blob {blob}", progress, properties.ContentLength, _blobClient.Name);
-                })
-            };
-            using BlobDownloadStreamingResult result = await _blobClient.DownloadStreamingAsync(options, cancellationToken);
             try
             {
+                BlobProperties properties = await _blobClient.GetPropertiesAsync(cancellationToken: cancellationToken);
+                var options = new BlobDownloadOptions
+                {
+                    ProgressHandler = new Progress<long>(
+                    progress =>
+                    {
+                        _logger.LogTrace("Downloaded {bytes}/{total} bytes of blob {blob}", progress, properties.ContentLength, _blobClient.Name);
+                    })
+                };
+                using BlobDownloadStreamingResult result = await _blobClient.DownloadStreamingAsync(options, cancellationToken);
                 await result.Content.CopyToAsync(outputStream, cancellationToken);
                 _logger.LogDebug("Finished downloading track: {name}", _blobClient.Name);
             }

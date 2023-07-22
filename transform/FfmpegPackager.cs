@@ -95,7 +95,7 @@ namespace MediaMigrate.Transform
                 manifestFiles.Add($"{manifestName}{DASH_MANIFEST}");
 
             return manifestFiles
-                .Select((f, i) => new PackagerOutput(f, fileType))
+                .Select((f, i) => new PackagerOutput(f, fileType, i == manifestFiles.Count -1 ? DASH_CONTENT_TYPE : HLS_CONTENT_TYPE, null))
                 .ToList();
         }
     }
