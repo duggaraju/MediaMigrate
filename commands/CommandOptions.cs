@@ -78,7 +78,7 @@ e.g: For Azure specify the storage account name or the URL <https://accountname.
             description: @"Skip assets that have been migrated already.");
 
         private static readonly Option<bool> _copyNonStreamable = new(
-            aliases: new[] { "--copy-nonstremable" },
+            aliases: new[] { "--copy-nonstreamable" },
             () => true,
             description: @"Copy non-stremable assets (Assets without .ism file) as is.");
 

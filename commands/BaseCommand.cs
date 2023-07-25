@@ -2,7 +2,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using System.CommandLine;
-using System.CommandLine.Invocation;
 using System.CommandLine.NamingConventionBinder;
 
 namespace MediaMigrate.Commands
@@ -20,12 +19,6 @@ namespace MediaMigrate.Commands
         {
             var handler = (THandler)ActivatorUtilities.CreateInstance(host.Services, typeof(THandler), options);
             await handler.MigrateAsync(cancellationToken);
-        }
-
-        public object GetOptions(InvocationContext context)
-        {
-            var binder = new ModelBinder<TOptions>();
-            return binder.CreateInstance(context.BindingContext)!;
         }
     }
 }
