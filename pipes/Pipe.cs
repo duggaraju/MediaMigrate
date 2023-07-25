@@ -1,4 +1,5 @@
 ﻿using FFMpegCore.Pipes;
+using MediaMigrate.Utils;
 using Microsoft.Extensions.Logging;
 using System.IO.Pipes;
 using System.Runtime.InteropServices;
@@ -49,8 +50,8 @@ namespace MediaMigrate.Pipes
             if (_server == null)
             {
                 var access = _direction == PipeDirection.Out ? FileAccess.Write : FileAccess.Read;
-                return new FileStream(PipePath, FileMode.Open, access, FileShare.ReadWrite, 16 * 1024, true);
-                //return File.Open(PipePath, FileMode.Open, access, FileShare.ReadWrite);
+                //return new FileStream(PipePath, FileMode.Open, access, FileShare.ReadWrite, 16 * 1024, true);
+                return File.Open(PipePath, FileMode.Open, access, FileShare.ReadWrite);
             }
             else
             {
@@ -119,21 +120,37 @@ namespace MediaMigrate.Pipes
     class ChainPipeSource : IPipeSource
     {
         protected readonly IPipeSource _from;
+        protected readonly ILogger _logger;
 
-        public ChainPipeSource(IPipeSource from)
+        public ChainPipeSource(IPipeSource from, ILogger logger)
         {
             _from = from;
+            _logger = logger;
         }
 
         public virtual string GetStreamArguments() => _from.GetStreamArguments();
 
         public async Task WriteAsync(Stream outputStream, CancellationToken cancellationToken)
         {
-            var server = new AnonymousPipeServerStream(PipeDirection.Out, HandleInheritability.None);
+            using var source = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            var server = new AnonymousPipeServerStream();
             var client = new AnonymousPipeClientStream(server.GetClientHandleAsString());
-            await Task.WhenAll(
-                TransformSource(server, cancellationToken),
-                TransformDestination(client, outputStream, cancellationToken));
+            var tasks = new List<Task>
+            {
+                TransformDestination(client, outputStream, source.Token),
+                TransformSource(server, source.Token)
+            };
+
+            try
+            {
+                await tasks.WaitAllThrowOnFirstError();
+            }
+            catch(Exception ex)
+            {
+                _logger.LogTrace(ex, "Chained pipe failed. cancelling all tasks");
+                source.Cancel();
+                throw;
+            }
         }
 
         protected virtual async Task TransformSource(Stream server, CancellationToken cancellationToken)

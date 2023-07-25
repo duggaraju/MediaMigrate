@@ -19,7 +19,7 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryUrl>https://github.com/duggaraju/MediaMigrate</RepositoryUrl>
     <PackageTags>Media;Migration;AMS;Azure;Media;Services;MediaMigrate;AWS;S3;Storage</PackageTags>
-    <Version>1.0.1</Version>
+    <Version>1.0.2</Version>
   </PropertyGroup>
 
   <ItemGroup>

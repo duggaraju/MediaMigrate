@@ -2,6 +2,7 @@
 using Azure.Storage.Blobs.Models;
 using Azure.Storage.Blobs.Specialized;
 using FFMpegCore.Pipes;
+using MediaMigrate.Log;
 using Microsoft.Extensions.Logging;
 
 namespace MediaMigrate.Pipes
@@ -44,12 +45,21 @@ namespace MediaMigrate.Pipes
             try
             {
                 BlobProperties properties = await _blobClient.GetPropertiesAsync(cancellationToken: cancellationToken);
+                // report update every 10%.
+                long update = 0;
+                const int UpdatePercentage = 10;
                 var options = new BlobDownloadOptions
                 {
                     ProgressHandler = new Progress<long>(
                     progress =>
                     {
-                        _logger.LogTrace("Downloaded {bytes}/{total} bytes of blob {blob}", progress, properties.ContentLength, _blobClient.Name);
+                        // report progress for every 10%.
+                        var percentage = progress * 100 / properties.ContentLength;
+                        if (percentage >= update)
+                        {
+                            _logger.LogTrace(Events.BlobDownload, "Downloaded {percentage}% ({bytes}/{total}) of blob {blob}", percentage, progress, properties.ContentLength, _blobClient.Name);
+                            update += UpdatePercentage;
+                        }
                     })
                 };
                 using BlobDownloadStreamingResult result = await _blobClient.DownloadStreamingAsync(options, cancellationToken);

@@ -6,6 +6,7 @@ using FFMpegCore.Pipes;
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 using MediaMigrate.Log;
+using MediaMigrate.Utils;
 
 namespace MediaMigrate.Transform
 {
@@ -211,17 +212,17 @@ namespace MediaMigrate.Transform
                 {
                     if (tracks[0] is TextTrack)
                     {
-                        source = new TtmlToVttTransmuxer(_transMuxer, source);
+                        source = new TtmlToVttTransmuxer(_transMuxer, source, _logger);
                     }
                     else
                     {
                         var trackId = tracks[0].TrackId;
-                        source = new IsmvToCmafMuxer(_transMuxer, source, trackId);
+                        source = new IsmvToCmafMuxer(_transMuxer, source, trackId, _logger);
                     }
                 }
                 else
                 {
-                    source = new FfmpegIsmvToMp4Muxer(_transMuxer, source, Channel.Both, input.FilePath);
+                    source = new FfmpegIsmvToMp4Muxer(_transMuxer, source, Channel.Both);
                 }
             }
 
@@ -234,18 +235,27 @@ namespace MediaMigrate.Transform
             string pathPrefix)
         {
             var file = output.File;
-            var progress = new Progress<long>(p => _logger.LogTrace(Events.BlobUpload, "Uploaded {byte} bytes to {file}", p, file));
+            // Report update for every 1MB.
+            long update = 0;
+            var progress = new Progress<long>(p =>
+            {
+                if (p >= update)
+                {
+                    _logger.LogTrace(Events.BlobUpload, "Uploaded {byte} bytes to {file}", p, file);
+                    update += 1024 * 1024;
+                }
+            });
             var headers = new ContentHeaders(output.ContentType, output.ContentLanguage);
             return new UploadSink(uploader, pathPrefix + file, headers, progress, _logger);
         }
 
-        private async Task DownloadAsync(AssetDetails assetDetails, PackagerInput input, string workingDirectory, CancellationToken cancellationToken)
+        private async Task DownloadAsync(AssetDetails assetDetails, PackagerInput input, CancellationToken cancellationToken)
         {
             var source = GetInputSource(assetDetails, input);
 
             if (source is IPipeToFileSource fileSource)
             {
-                await fileSource.RunAsync(cancellationToken);
+                await fileSource.WriteToAsync(input.FilePath, cancellationToken);
             }
             else
             {
@@ -288,7 +298,7 @@ namespace MediaMigrate.Transform
 
             await Task.WhenAll(inputs
                 .Where(i => i.Type == FileType.File)
-                .Select(i => DownloadAsync(assetDetails, i, workingDirectory, cancellationToken)));
+                .Select(i => DownloadAsync(assetDetails, i, cancellationToken)));
 
             var outputDirectory = Path.Combine(workingDirectory, "output");
             Directory.CreateDirectory(outputDirectory);
@@ -301,7 +311,7 @@ namespace MediaMigrate.Transform
                 if (output.Type == FileType.Pipe)
                 {
                     var pipe = new PipeSink(filePath, sink, _logger);
-                    filePath = pipe.PipePath;
+                    output.FilePath = pipe.PipePath;
                     pipes.Add(pipe);
                 }
                 else
@@ -329,12 +339,15 @@ namespace MediaMigrate.Transform
                     }
                 }));
 
-            while (allTasks.Count > 0)
+            try
             {
-                var currentTask = await Task.WhenAny(allTasks);
-                // throw if any task fails.
-                await currentTask;
-                allTasks.Remove(currentTask);
+                await allTasks.WaitAllThrowOnFirstError();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogTrace(ex, "One of the tasks failed. Cancelling all.");
+                source.Cancel();
+                throw;
             }
 
             _logger.LogTrace("Packaging {asset }finished successfully!", assetDetails.AssetName);

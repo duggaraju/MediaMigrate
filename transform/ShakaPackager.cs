@@ -32,7 +32,8 @@ namespace MediaMigrate.Transform
         // Shaka packager cannot handle smooth input.
         protected override FileType GetInputFileType(Manifest manifest)
         {
-            return FileType.Pipe;
+            // TODO: issue when using pipe for transmuxed input.
+            return manifest.Format == "fmp4" ? FileType.File : FileType.Pipe;
         }
 
         protected override bool NeedsTransMux(Manifest manifest, ClientManifest? clientManifest)

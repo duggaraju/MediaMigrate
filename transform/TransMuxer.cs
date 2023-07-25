@@ -9,6 +9,7 @@ using Media.ISO.Boxes;
 using Microsoft.Extensions.Logging;
 using System.Buffers;
 using System.Text;
+using System.IO.Pipes;
 
 namespace MediaMigrate.Transform
 {
@@ -125,15 +126,22 @@ namespace MediaMigrate.Transform
             }
         }
 
-        public static async Task ReadAsync(Stream stream, Memory<byte> memory, CancellationToken cancellationToken)
+        public static async Task<int> ReadExactAsync(Stream stream, Memory<byte> memory, CancellationToken cancellationToken)
         {
             var bytes = memory.Length;
+            var bytesRead = 0;
             while (bytes > 0)
             {
                 var read = await stream.ReadAsync(memory, cancellationToken);
+                if (read == 0)
+                {
+                    break;
+                }
                 memory = memory.Slice(read);
+                bytesRead += read;
                 bytes -= read;
             }
+            return bytesRead;
         }
 
         static readonly TimeSpan MilliSecond = TimeSpan.FromMilliseconds(1);
@@ -160,7 +168,7 @@ namespace MediaMigrate.Transform
                 {
                     using var memory = pool.Rent(size);
                     var buffer = memory.Memory.Slice(0, size);
-                    await ReadAsync(input, buffer, cancellationToken);
+                    await ReadExactAsync(input, buffer, cancellationToken);
                     var stream = buffer.AsStream();
                     var captions = TtmlCaptions.Parse(stream, _logger);
                     foreach (var caption in captions.Body.Captions)
@@ -189,11 +197,15 @@ namespace MediaMigrate.Transform
             var skip = false;
             while (true)
             {
-                var bytes = await source.ReadAsync(header, cancellationToken);
+                var bytes = await ReadExactAsync(source, header.AsMemory(), cancellationToken);
                 if (bytes == 0) break;
                 var box = BoxFactory.Parse(header.AsSpan());
                 _logger.LogTrace("Found Box {type} size {size}", box.Type.GetBoxName(), box.Size);
                 var size = (int)box.Size;
+                if (!Enum.IsDefined(box.Type))
+                {
+                    _logger.LogError("Unknown box type {type}", box.Type);
+                }
                 if (box.Type == BoxType.MovieFragmentRandomAccessBox)
                 {
                     _logger.LogTrace("Skipping box {type} size {size}", box.Type, box.Size);
@@ -203,7 +215,7 @@ namespace MediaMigrate.Transform
                 using var memory = pool.Rent((int)box.Size);
                 var buffer = memory.Memory.Slice(0, size);
                 header.CopyTo(buffer);
-                await ReadAsync(source, buffer.Slice(8), cancellationToken);
+                await ReadExactAsync(source, buffer.Slice(8), cancellationToken);
                 if (box.Type == BoxType.MovieFragmentBox)
                 {
                     var stream = buffer.AsStream();
@@ -246,7 +258,7 @@ namespace MediaMigrate.Transform
     {
         private readonly TransMuxer _transMuxer;
 
-        public TtmlToVttTransmuxer(TransMuxer transMuxer, IPipeSource source) : base(source)
+        public TtmlToVttTransmuxer(TransMuxer transMuxer, IPipeSource source, ILogger logger) : base(source, logger)
         {
             _transMuxer = transMuxer;
         }
@@ -267,7 +279,7 @@ namespace MediaMigrate.Transform
         private readonly TransMuxer _transMuxer;
         private readonly int _trackId;
 
-        public IsmvToCmafMuxer(TransMuxer transMuxer, IPipeSource source, int trackId) : base(source)
+        public IsmvToCmafMuxer(TransMuxer transMuxer, IPipeSource source, int trackId, ILogger logger) : base(source, logger)
         {
             _transMuxer = transMuxer;
             _trackId = trackId;
@@ -286,7 +298,7 @@ namespace MediaMigrate.Transform
 
     interface IPipeToFileSource : IPipeSource
     {
-        public Task RunAsync(CancellationToken cancellationToken);
+        public Task WriteToAsync(string destination, CancellationToken cancellationToken);
     }
 
     class FfmpegIsmvToMp4Muxer : IPipeToFileSource
@@ -294,14 +306,12 @@ namespace MediaMigrate.Transform
         private readonly TransMuxer _transMuxer;
         private readonly IPipeSource _from;
         private readonly Channel _channel;
-        private readonly string _destination;
 
-        public FfmpegIsmvToMp4Muxer(TransMuxer transMuxer, IPipeSource source, Channel channel, string destionation)
+        public FfmpegIsmvToMp4Muxer(TransMuxer transMuxer, IPipeSource source, Channel channel)
         {
             _transMuxer = transMuxer;
             _from = source;
             _channel = channel;
-            _destination = destionation;
         }
 
         public string GetStreamArguments() => "-f mp4";
@@ -317,9 +327,9 @@ namespace MediaMigrate.Transform
             await _transMuxer.PipedTransMuxAsync(_from, sink, _channel, cancellationToken);
         }
 
-        public async Task RunAsync(CancellationToken cancellationToken)
+        public async Task WriteToAsync(string destination, CancellationToken cancellationToken)
         {
-            await _transMuxer.TransMuxAsync(_from, _destination, _channel, cancellationToken);
+            await _transMuxer.TransMuxAsync(_from, destination, _channel, cancellationToken);
         }
 
         protected async Task TransformSource(Stream server, CancellationToken cancellationToken)
