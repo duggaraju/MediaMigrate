@@ -25,8 +25,7 @@ Report - A migration report")
         public AnalysisCommand() :
             base("analyze", CommandDescription)
         {
-            this.AddBatchOption()
-                .AddOption(_analysisType);
+            this.AddOption(_analysisType);
         }
     }
 }

@@ -1,8 +1,7 @@
 ﻿namespace MediaMigrate.Contracts
 {
     public record KeyOptions(
-        Uri KeyVaultUrl,
-        int BatchSize) : QueryOptions
+        Uri KeyVaultUrl) : QueryOptions
     {
         public string? KeyTemplate { get; set; }
     }

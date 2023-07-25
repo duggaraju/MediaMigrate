@@ -33,7 +33,7 @@ namespace MediaMigrate.Transform
         protected override FileType GetInputFileType(Manifest manifest)
         {
             // TODO: issue when using pipe for transmuxed input.
-            return manifest.Format == "fmp4" ? FileType.File : FileType.Pipe;
+            return manifest.Format == "fmp4" ? FileType.Pipe : FileType.Pipe;
         }
 
         protected override bool NeedsTransMux(Manifest manifest, ClientManifest? clientManifest)
@@ -69,8 +69,8 @@ namespace MediaMigrate.Transform
                 });
             var dash = manifests[manifests.Count - 1].FilePath;
             var hls = manifests[manifests.Count - 2].FilePath;
-            var logging = false;
-            var extraArgs = $"{(usePipe ? "--io_block_size 65536" : string.Empty)} {(logging ? "--vmodule=*=2" : string.Empty)}";
+            var vlog = 0;
+            var extraArgs = $"{(usePipe ? "--io_block_size 65536" : string.Empty)} --vmodule=*={vlog}";
             return $"{extraArgs} {string.Join(" ", tracks)} --segment_duration {_options.SegmentDuration} --mpd_output {dash} --hls_master_playlist_output {hls}";
         }
 

@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging;
 using Spectre.Console;
 using System.Diagnostics;
 using System.Threading.Channels;
+using System.Collections.Concurrent;
 
 namespace MediaMigrate.Ams
 {
@@ -139,7 +140,7 @@ namespace MediaMigrate.Ams
         {
             var watch = Stopwatch.StartNew();
 
-            var assetsByYear = new SortedDictionary<int, int>();
+            var assetsByYear = new ConcurrentDictionary<int, int>();
 
             _logger.LogInformation("Begin analysis of assets for account: {name}", _globalOptions.AccountName);
             var account = await GetMediaAccountAsync(cancellationToken);
@@ -168,31 +169,15 @@ namespace MediaMigrate.Ams
             var progress = ShowProgressAsync("Analyzing Assets", "Assets", totalAssets, channel.Reader, cancellationToken);
             var writer = channel.Writer;
             var currentYear = DateTimeOffset.Now.Year;
-            await MigrateInBatches(assets, async assets =>
+            await MigrateInParallel(assets, async (asset, cancellationToken) =>
             {
-                foreach (var asset in assets)
-                {
-                    var year = asset.Data.CreatedOn?.Year ?? currentYear;
-                    if (assetsByYear.ContainsKey(year))
-                    {
-                        assetsByYear[year]++;
-                    }
-                    else
-                    {
-                        assetsByYear[year] = 1;
-                    }
-                    var tasks = assets.Select(asset => AnalyzeAsync(asset, storage, cancellationToken));
-                    var results = await Task.WhenAll(tasks);
-                    reportGenerator?.WriteRows(results);
-                    foreach (var result in results)
-                    {
-                        AggregateResult(result, ref statistics, assetTypes);
-                        await writer.WriteAsync(statistics.TotalAssets, cancellationToken);
-                    }
-                }
-            },
-            _analysisOptions.BatchSize,
-            cancellationToken);
+                var year = asset.Data.CreatedOn?.Year ?? currentYear;
+                assetsByYear.AddOrUpdate(year, 1, (key, value) => Interlocked.Increment(ref value));
+                var result = await AnalyzeAsync(asset, storage, cancellationToken);
+                AggregateResult(result, ref statistics, assetTypes);
+                await writer.WriteAsync(statistics.TotalAssets, cancellationToken);
+            }, _analysisOptions.BatchSize, cancellationToken);
+
             writer.Complete();
             await progress;
             _logger.LogDebug("Finished analysis of assets for account: {name}. Time taken {elapsed}", _globalOptions.AccountName, watch.Elapsed);

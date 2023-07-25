@@ -8,7 +8,34 @@ using System.Threading.Channels;
 
 namespace MediaMigrate.Ams
 {
-    record struct KeyStats(int Total, int Encrypted, int Successful, int Failed);
+    record struct KeyStats(int Encrypted, int Successful, int Failed)
+    {
+        private int _total = default;
+        private int _encrypted = default;
+        private int _successful = default;
+        private int _failed = default;
+
+        public readonly int Total => _total;
+
+        public void Update(MigrationStatus result, MediaAssetStorageEncryptionFormat? format)
+        {
+            Interlocked.Increment(ref _total);
+            if (format != MediaAssetStorageEncryptionFormat.None)
+            {
+                Interlocked.Increment(ref _encrypted);
+            }
+
+            switch (result)
+            {
+                case MigrationStatus.Failure:
+                    Interlocked.Increment(ref _failed);
+                    break;
+                case MigrationStatus.Success:
+                    Interlocked.Increment(ref _successful);
+                    break;
+            }
+        }
+    }
 
     internal class KeysMigrator : BaseMigrator
     {
@@ -45,31 +72,14 @@ namespace MediaMigrate.Ams
             var stats = new KeyStats();
             var channel = Channel.CreateBounded<double>(1);
             var progress = ShowProgressAsync("Migrate encryption keys", "Assets", 1.0, channel.Reader, cancellationToken);
-            await MigrateInBatches(assets, async assets =>
-            {
-                stats.Total += assets.Length;
-                var tasks = assets
-                    .Where(a => a.Data.StorageEncryptionFormat != MediaAssetStorageEncryptionFormat.None)
-                    .Select(asset => MigrateAssetAsync(asset, cancellationToken));
-                var results = await Task.WhenAll(tasks);
-                stats.Encrypted += results.Length;
-                foreach (var result in results)
-                {
-                    switch (result)
-                    {
-                        case MigrationStatus.Failure:
-                            stats.Failed++;
-                            break;
-                        case MigrationStatus.Success:
-                            stats.Successful++;
-                            break;
-                    }
 
-                    await channel.Writer.WriteAsync(stats.Total);
-                }
-            },
-            _keyOptions.BatchSize,
-            cancellationToken);
+            await MigrateInParallel(assets, async (asset, cancellationToken) =>
+            {
+                var result = await MigrateAssetAsync(asset, cancellationToken);
+                stats.Update(result, asset.Data.StorageEncryptionFormat);
+                await channel.Writer.WriteAsync(stats.Total);
+            }, _globalOptions.BatchSize, cancellationToken);
+
             _logger.LogInformation("Finished migration of keys for account: {name}", _globalOptions.AccountName);
             channel.Writer.Complete();
             await progress;

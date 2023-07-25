@@ -9,7 +9,6 @@ using Media.ISO.Boxes;
 using Microsoft.Extensions.Logging;
 using System.Buffers;
 using System.Text;
-using System.IO.Pipes;
 
 namespace MediaMigrate.Transform
 {
@@ -200,7 +199,7 @@ namespace MediaMigrate.Transform
                 var bytes = await ReadExactAsync(source, header.AsMemory(), cancellationToken);
                 if (bytes == 0) break;
                 var box = BoxFactory.Parse(header.AsSpan());
-                _logger.LogTrace("Found Box {type} size {size}", box.Type.GetBoxName(), box.Size);
+                _logger.LogTrace(Events.TransMuxer, "Found Box {type} size {size}", box.Type.GetBoxName(), box.Size);
                 var size = (int)box.Size;
                 if (!Enum.IsDefined(box.Type))
                 {
@@ -208,7 +207,7 @@ namespace MediaMigrate.Transform
                 }
                 if (box.Type == BoxType.MovieFragmentRandomAccessBox)
                 {
-                    _logger.LogTrace("Skipping box {type} size {size}", box.Type, box.Size);
+                    _logger.LogTrace(Events.TransMuxer, "Skipping box {type} size {size}", box.Type, box.Size);
                     await SkipAsync(source, size - 8, cancellationToken);
                     continue;
                 }
@@ -244,7 +243,11 @@ namespace MediaMigrate.Transform
                         track.Children.Insert(0, tfdt);
                     }
                     moof.ComputeSize();
-                    moof.Write(destination);
+                    var newSize = (int) moof.Size;
+                    using var newMoof = pool.Rent(newSize);
+                    var target = newMoof.Memory.AsStream();
+                    moof.Write(target);
+                    await destination.WriteAsync(newMoof.Memory.Slice(0, newSize));
                 }
                 else if (!skip)
                 {

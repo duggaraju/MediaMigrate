@@ -12,15 +12,66 @@ using System.Threading.Channels;
 
 namespace MediaMigrate.Ams
 {
-    record struct AssetStats(
-        int Total,
-        int Encrypted,
-        int Streamable,
-        int Migrated,
-        int Skipped,
-        int Successful,
-        int Failed,
-        int Deleted);
+    record struct AssetStats()
+    {
+        private int _total = default;
+        private int _encrypted = default;
+        private int _streamable = default;
+        private int _successful = default;
+        private int _migrated = default;
+        private int _skipped = default;
+        private int _failed = default;
+        private int _deleted = default;
+
+        public readonly int Total => _total;
+
+        public readonly int Encrypted => _encrypted;
+
+        public readonly int Streamable => _streamable;
+
+        public readonly int Successful => _successful;
+
+        public readonly int Failed => _failed;
+
+        public readonly int Skipped => _skipped;
+
+        public readonly int Migrated => _migrated;
+
+        public readonly int Deleted => _deleted;
+
+        public void Update(MigrationResult result, bool deleteMigrated, MediaAssetStorageEncryptionFormat? format = null)
+        {
+            Interlocked.Increment(ref _total);
+            if (format != MediaAssetStorageEncryptionFormat.None)
+            {
+                Interlocked.Increment(ref _encrypted);
+            }
+            if (result.Format != null)
+            {
+                Interlocked.Increment(ref _streamable);
+            }
+            switch (result.Status)
+            {
+                case MigrationStatus.Success:
+                    Interlocked.Increment(ref _successful);
+                    if (deleteMigrated)
+                    {
+                        Interlocked.Increment(ref _deleted);
+                    }
+                    break;
+
+                case MigrationStatus.Skipped:
+                    Interlocked.Increment(ref _skipped);
+                    break;
+                case MigrationStatus.AlreadyMigrated:
+                    Interlocked.Increment(ref _migrated);
+                    break;
+                case MigrationStatus.Failure:
+                    Interlocked.Increment(ref _failed);
+                    break;
+            }
+        }
+    }
 
     internal class AssetMigrator : BaseMigrator
     {
@@ -71,43 +122,14 @@ cancellationToken: cancellationToken);
             var orderBy = "properties/created";
             var assets = account.GetMediaAssets()
                 .GetAllAsync(_options.GetFilter(), orderby: orderBy, cancellationToken: cancellationToken);
-            await MigrateInBatches(assets, async assets =>
+
+            await MigrateInParallel(assets, async (asset, cancellationToken) =>
             {
-                var results = await Task.WhenAll(
-                    assets.Select(async asset => await MigrateAsync(account, storage, asset, cancellationToken)));
-                stats.Total += results.Length;
-                stats.Encrypted += assets.Count(a => a.Data.StorageEncryptionFormat != MediaAssetStorageEncryptionFormat.None);
-                foreach (var result in results)
-                {
-                    if (result.Format != null)
-                    {
-                        ++stats.Streamable;
-                    }
+                var result = await MigrateAsync(account, storage, asset, cancellationToken);
+                stats.Update(result, _options.DeleteMigrated, asset.Data.StorageEncryptionFormat);
+                await writer.WriteAsync(stats.Total, cancellationToken);
+            }, _globalOptions.BatchSize, cancellationToken);
 
-                    switch (result.Status)
-                    {
-                        case MigrationStatus.Success:
-                            ++stats.Successful;
-                            if (_options.DeleteMigrated)
-                            {
-                                ++stats.Deleted;
-                            }
-                            break;
-
-                        case MigrationStatus.Skipped:
-                            ++stats.Skipped;
-                            break;
-                        case MigrationStatus.AlreadyMigrated:
-                            ++stats.Migrated;
-                            break;
-                        case MigrationStatus.Failure:
-                            ++stats.Failed;
-                            break;
-                    }
-
-                    await writer.WriteAsync(stats.Total, cancellationToken);
-                }
-            }, _options.BatchSize, cancellationToken);
             writer.Complete();
             return stats;
         }

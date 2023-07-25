@@ -147,37 +147,14 @@ namespace MediaMigrate.Ams
             var stats = new AssetStats();
             var containers = storageClient.GetBlobContainersAsync(
                 prefix: _assetOptions.GetFilter() ?? "asset-", cancellationToken: cancellationToken);
-            await MigrateInBatches(containers, async containers =>
+
+            await MigrateInParallel(containers, async (container, cancellationToken) =>
             {
-                var tasks = containers.Select(container => MigrateAsync(storageClient, container, cancellationToken));
-                var results = await Task.WhenAll(tasks);
-                stats.Total += results.Length;
-                foreach (var result in results)
-                {
-                    switch (result.Status)
-                    {
-                        case MigrationStatus.Success:
-                            ++stats.Successful;
-                            if (_assetOptions.DeleteMigrated)
-                            {
-                                ++stats.Deleted;
-                            }
-                            break;
-                        case MigrationStatus.Skipped:
-                            ++stats.Skipped;
-                            break;
-                        case MigrationStatus.AlreadyMigrated:
-                            ++stats.Migrated;
-                            break;
-                        default:
-                            ++stats.Failed;
-                            break;
-                    }
-                    await writer.WriteAsync(stats, cancellationToken);
-                }
+                var result = await MigrateAsync(storageClient, container, cancellationToken);
+                stats.Update(result, _assetOptions.DeleteMigrated);
+                await writer.WriteAsync(stats, cancellationToken);
             },
-            _assetOptions.BatchSize,
-            cancellationToken);
+            _globalOptions.BatchSize, cancellationToken);
 
             writer.Complete();
             return stats;

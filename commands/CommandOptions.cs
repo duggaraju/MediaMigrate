@@ -87,25 +87,15 @@ e.g: For Azure specify the storage account name or the URL <https://accountname.
             () => false,
             description: @"Delete the asset after migration.");
 
-        const int DefaultBatchSize = 1;
         private static readonly Option<int> _batchSize = new(
             aliases: new[] { "--batch-size", "-b" },
-            () => DefaultBatchSize,
+            () => GlobalOptions.DefaultBatchSize,
             description: @"Batch size for parallel processing.");
 
         const int DefaultSegmentDurationInSeconds = 6;
 
         public static Command AddMigrationOptions(this Command command)
         {
-            _batchSize.AddValidator(result =>
-            {
-                var value = result.GetValueOrDefault<int>();
-                if (value < 1 || value > 10)
-                {
-                    result.ErrorMessage = "Invalid batch size. Only values 1..10 are supported";
-                }
-            });
-
             command.AddOption(_markComplete);
             command.AddOption(_skipMigrated);
             command.AddOption(_packagerType);
@@ -182,11 +172,21 @@ Depending on the type of authentcation you may have to set some environment vari
             command.AddGlobalOption(_accoutName);
             command.AddGlobalOption(_cloudType);
             command.AddGlobalOption(_daemonMode);
+            command.AddBatchOption();
             return command;
         }
 
         public static Command AddBatchOption(this Command command)
         {
+            _batchSize.AddValidator(result =>
+            {
+                var value = result.GetValueOrDefault<int>();
+                if (value < 1 || value > 10)
+                {
+                    result.ErrorMessage = "Invalid batch size. Only values [1..10] are supported";
+                }
+            });
+
             command.AddOption(_batchSize);
             return command;
         }

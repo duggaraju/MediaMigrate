@@ -7,9 +7,10 @@ namespace MediaMigrate.Contracts
         string ResourceGroup,
         string AccountName)
     {
-        private readonly string _logFile = $"MigrationLog_{DateTime.Now:HH_mm_ss}.txt";
+        public const int DefaultBatchSize = 5;
+        public readonly string RunId = $"{DateTime.Now:HH_mm_ss}";
 
-        public string LogFile => Path.Combine(LogDirectory, _logFile);
+        public string LogFile => Path.Combine(LogDirectory, $"MigrationLog_{RunId}.txt");
 
         public CloudType CloudType { get; set; } = CloudType.Azure;
 
@@ -18,6 +19,8 @@ namespace MediaMigrate.Contracts
         public LogLevel LogLevel { get; set; } = LogLevel.Warning;
 
         public bool DaemonMode { get; set; } = false;
+
+        public int BatchSize { get; set; } = DefaultBatchSize;
     }
 }
 

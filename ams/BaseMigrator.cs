@@ -1,5 +1,4 @@
 ﻿using MediaMigrate.Contracts;
-using Azure;
 using Azure.Core;
 using Azure.Monitor.Query;
 using Azure.Monitor.Query.Models;
@@ -36,19 +35,19 @@ namespace MediaMigrate.Ams
             return _resourceProvider.GetMediaAccountAsync(cancellationToken); ;
         }
 
-        protected async Task MigrateInBatches<T>(
-            AsyncPageable<T> pageable,
-            Func<T[], Task> processBatch,
-            int batchSize = 1,
-            CancellationToken cancellationToken = default) where T : notnull
+
+        protected async Task MigrateInParallel<T>(
+            IAsyncEnumerable<T> values,
+            Func<T, CancellationToken, ValueTask> processItem,
+            int batchSize = 5,
+            CancellationToken cancellationToken = default)
         {
-            await foreach (var page in pageable.AsPages())
+            var options = new ParallelOptions
             {
-                foreach (var batch in page.Values.Chunk(batchSize))
-                {
-                    await processBatch(batch);
-                }
-            }
+                MaxDegreeOfParallelism = batchSize,
+                CancellationToken = cancellationToken
+            };
+            await Parallel.ForEachAsync(values, cancellationToken, processItem);
         }
 
         protected async Task<double> GetStorageBlobMetricAsync(ResourceIdentifier accountId, CancellationToken cancellationToken)
@@ -88,17 +87,17 @@ namespace MediaMigrate.Ams
             CancellationToken cancellationToken)
         {
             await _console
-            .Progress()
-            .AutoRefresh(true)
-            .AutoClear(true)
-            .HideCompleted(true)
-            .Columns(
-                new TaskDescriptionColumn(),
-                new ProgressBarColumn(),
-                new StatusColumn(unit),
-                new PercentageColumn(),
-                new ElapsedTimeColumn(),
-                new SpinnerColumn())
+                .Progress()
+                .AutoRefresh(true)
+                .AutoClear(true)
+                .HideCompleted(true)
+                .Columns(
+                    new TaskDescriptionColumn(),
+                    new ProgressBarColumn(),
+                    new StatusColumn(unit),
+                    new PercentageColumn(),
+                    new ElapsedTimeColumn(),
+                    new SpinnerColumn())
             .StartAsync(async context =>
             {
                 var task = context.AddTask(description, maxValue: totalValue);

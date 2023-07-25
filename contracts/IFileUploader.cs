@@ -1,7 +1,4 @@
-﻿
-using System.Net.Http.Headers;
-
-namespace MediaMigrate.Contracts
+﻿namespace MediaMigrate.Contracts
 {
     public interface IUploader
     {
