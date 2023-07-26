@@ -12,9 +12,11 @@ namespace MediaMigrate.Contracts
 
         public bool OverWrite { get; set; } = true;
 
-        public string WorkingDirectory { get; set; } = Path.Combine(Path.GetTempPath(), "MediaMigrate");
+        public string WorkingDirectory { get; set; } = Path.Combine(Path.GetTempPath(), GlobalOptions.PathSuffix, $"Run{GlobalOptions.RunId}");
 
         public string ContainerPrefix { get; set; } = "asset-";
+
+        public bool ShowChart { get; set; } = false;
     }
 
     public record AssetOptions(
@@ -37,6 +39,6 @@ namespace MediaMigrate.Contracts
                 CreatedBefore = CreatedBefore,
                 Filter = Filter
             }.GetFilter();
-    }
+        }
     }
 }

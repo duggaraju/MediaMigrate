@@ -6,18 +6,11 @@ namespace MediaMigrate.Commands
 {
     class StorageCommand : BaseCommand<StorageOptions, StorageMigrator>
     {
-        static readonly Option<string> _containerPrefix = new Option<string>(
-            new[] { "-p", "--prefix" },
-            () => "asset-",
-            description: "The prefix for container names to filter")
-        {
-            IsRequired = false,
-        };
 
         private static readonly Option<string> _pathTemplate = new(
-    aliases: new[] { "--path-template", "-t" },
-    () => "${AssetId}/",
-    description: @"Path template to determine the final path in the storage where files are uploaded.
+            aliases: new[] { "--path-template", "-t" },
+            () => "${ContainerName}/",
+            description: @"Path template to determine the final path in the storage where files are uploaded.
 Can use ${ContainerName}.
 e.g., videos/${ContainerName} will upload to a container named 'videos' with path begining with the asset name.")
         {
@@ -43,9 +36,10 @@ Doesn't require the Azure media services to be running.";
                 }
             });
 
+            AddCommand(new StorageResetCommand());
             this.AddMigrationOptions()
                 .AddStorageOptions(_pathTemplate)
-                .AddOption(_containerPrefix);
+                .AddStorageQueryOptions();
         }
     }
 }

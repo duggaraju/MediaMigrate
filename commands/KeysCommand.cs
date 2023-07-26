@@ -6,7 +6,7 @@ namespace MediaMigrate.Commands
 {
     internal class KeysCommand : BaseCommand<KeyOptions, KeysMigrator>
     {
-        private static readonly Option<Uri> _keyVaultUri = new Option<Uri>(
+        private static readonly Option<Uri> _keyVaultUri = new(
             aliases: new[] { "--key-vault-url", "-k" },
             description: @"The vault for migrating keys.
 Specific to the cloud you are migrating to.
@@ -16,7 +16,7 @@ For Azure it is <https://valutname.azure.net>")
             Arity = ArgumentArity.ExactlyOne
         };
 
-        private static readonly Option<string?> _secretTemplate = new Option<string?>(
+        private static readonly Option<string?> _secretTemplate = new(
             aliases: new[] { "--secret-template", "-t" },
             () => "${KeyId}",
             description: @"Template for the name in the vault with which the key is stored.

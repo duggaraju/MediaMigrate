@@ -9,7 +9,7 @@ namespace MediaMigrate.Transform
         private readonly PackagerFactory _packagerFactory;
 
         public PackageTransform(
-            AssetOptions options,
+            StorageOptions options,
             ILogger<PackageTransform> logger,
             TemplateMapper templateMapper,
             IUploader uploader,

@@ -8,14 +8,20 @@ using System.Threading.Channels;
 
 namespace MediaMigrate.Ams
 {
-    record struct KeyStats(int Encrypted, int Successful, int Failed)
+    record class KeyStats : IStats
     {
         private int _total = default;
         private int _encrypted = default;
         private int _successful = default;
         private int _failed = default;
 
-        public readonly int Total => _total;
+        public int Total => _total;
+
+        public int Successful => _successful;
+
+        public int Failed => _failed;
+
+        public int Encrypted => _encrypted;
 
         public void Update(MigrationStatus result, MediaAssetStorageEncryptionFormat? format)
         {
@@ -70,14 +76,14 @@ namespace MediaMigrate.Ams
                 .GetAllAsync(_keyOptions.GetFilter(), orderby: orderBy, cancellationToken: cancellationToken);
 
             var stats = new KeyStats();
-            var channel = Channel.CreateBounded<double>(1);
+            var channel = Channel.CreateBounded<KeyStats>(1);
             var progress = ShowProgressAsync("Migrate encryption keys", "Assets", 1.0, channel.Reader, cancellationToken);
 
             await MigrateInParallel(assets, async (asset, cancellationToken) =>
             {
                 var result = await MigrateAssetAsync(asset, cancellationToken);
                 stats.Update(result, asset.Data.StorageEncryptionFormat);
-                await channel.Writer.WriteAsync(stats.Total);
+                await channel.Writer.WriteAsync(stats);
             }, _globalOptions.BatchSize, cancellationToken);
 
             _logger.LogInformation("Finished migration of keys for account: {name}", _globalOptions.AccountName);

@@ -14,12 +14,12 @@ namespace MediaMigrate.Ams
     {
         private readonly ILogger _logger;
         private readonly TransformFactory _transformFactory;
-        private readonly AssetOptions _assetOptions;
+        private readonly StorageOptions _storageOptions;
         private readonly IMigrationTracker<BlobContainerClient, AssetMigrationResult> _tracker;
 
         public StorageMigrator(
             GlobalOptions options,
-            AssetOptions assetOptions,
+            StorageOptions storageOptions,
             IAnsiConsole console,
             IMigrationTracker<BlobContainerClient, AssetMigrationResult> tracker,
             TokenCredential credentials,
@@ -27,7 +27,7 @@ namespace MediaMigrate.Ams
             ILogger<StorageMigrator> logger) :
             base(options, console, credentials)
         {
-            _assetOptions = assetOptions;
+            _storageOptions = storageOptions;
             _tracker = tracker;
             _transformFactory = transformFactory;
             _logger = logger;
@@ -43,16 +43,24 @@ namespace MediaMigrate.Ams
             var channel = Channel.CreateBounded<AssetStats>(1);
             var writer = channel.Writer;
 
-            //var progress = CreateProgressAsync("Migrate Containers", totalContainers, channel.Reader, cancellationToken);
-            var progress = DisplayChartAsync(
-                "Container Migration",
-                totalContainers,
-                channel.Reader);
+            Task progress;
+            if (_storageOptions.ShowChart)
+            {
+                progress = DisplayChartAsync("Container Migration", totalContainers, channel.Reader);
+            }
+            else
+            {
+                progress = ShowProgressAsync("Migrate Containers", "containers", totalContainers, channel.Reader, cancellationToken);
+            }
+
             var stats = await MigrateAsync(storageClient, writer, cancellationToken);
             _logger.LogInformation("Finished migration of containers from account: {name}. Time : {time}", storageClient.AccountName, watch.Elapsed);
             await progress;
 
-            //WriteSummary(totalContainers, stats);
+            if (!_storageOptions.ShowChart)
+            {
+                WriteSummary(totalContainers, stats);
+            }
         }
 
         public async Task DisplayChartAsync(
@@ -92,7 +100,7 @@ namespace MediaMigrate.Ams
             };
         }
 
-        private async Task<MigrationResult> MigrateAsync(
+        private async Task<AssetMigrationResult> MigrateAsync(
             BlobServiceClient storageClient,
             BlobContainerItem container,
             CancellationToken cancellationToken)
@@ -100,41 +108,49 @@ namespace MediaMigrate.Ams
             var result = new AssetMigrationResult();
             var containerClient = storageClient.GetBlobContainerClient(container.Name);
             // Check if already migrated.
-            if (_assetOptions.SkipMigrated)
+            if (_storageOptions.SkipMigrated)
             {
                 result = await _tracker.GetMigrationStatusAsync(containerClient, cancellationToken);
                 if (result.Status == MigrationStatus.Success)
                 {
-
                     _logger.LogDebug("Asset: {name} has already been migrated.", container.Name);
                     result.Status = MigrationStatus.AlreadyMigrated;
                     return result;
                 }
             }
 
-            var details = await containerClient.GetDetailsAsync(_logger, cancellationToken);
-            _logger.LogTrace("Container {container} is in format: {format}.", container.Name, details.Manifest?.Format);
-
-            var transforms = _transformFactory.GetStorageTransforms(_assetOptions);
-            var status = MigrationStatus.Skipped;
-            foreach (var transform in transforms)
+            try
             {
-                result = await transform.RunAsync(details, cancellationToken);
+                var details = await containerClient.GetDetailsAsync(_logger, cancellationToken);
+                _logger.LogTrace("Container {container} is in format: {format}.", container.Name, details.Manifest?.Format);
 
-                if (result.Status != MigrationStatus.Skipped)
+                var transforms = _transformFactory.GetStorageTransforms(_storageOptions);
+                var status = MigrationStatus.Skipped;
+                foreach (var transform in transforms)
                 {
-                    break;
+                    result = await transform.RunAsync(details, cancellationToken);
+                    if (result.Status != MigrationStatus.Skipped)
+                    {
+                        break;
+                    }
+                }
+
+                if (_storageOptions.MarkCompleted)
+                {
+                    await _tracker.UpdateMigrationStatus(containerClient, result, cancellationToken);
+                }
+
+                if (status == MigrationStatus.Success && _storageOptions.DeleteMigrated)
+                {
+                    _logger.LogWarning("Deleting container {name} after migration", container.Name);
+                    await storageClient.DeleteBlobContainerAsync(container.Name, cancellationToken: cancellationToken);
                 }
             }
-
-            if (_assetOptions.MarkCompleted)
+            catch (Exception ex)
             {
-                await _tracker.UpdateMigrationStatus(containerClient, result, cancellationToken);
-            }
-            if (status == MigrationStatus.Success && _assetOptions.DeleteMigrated)
-            {
-                _logger.LogWarning("Deleting container {name} after migration", container.Name);
-                await storageClient.DeleteBlobContainerAsync(container.Name, cancellationToken: cancellationToken);
+                _logger.LogError("Failed to migrate container {name}", container.Name);
+                _logger.LogTrace(ex, "Container {name} migration failed!", container.Name);
+                result.Status = MigrationStatus.Failure;
             }
             return result;
         }
@@ -146,12 +162,12 @@ namespace MediaMigrate.Ams
         {
             var stats = new AssetStats();
             var containers = storageClient.GetBlobContainersAsync(
-                prefix: _assetOptions.GetFilter() ?? "asset-", cancellationToken: cancellationToken);
+                prefix: _storageOptions.ContainerPrefix, cancellationToken: cancellationToken);
 
             await MigrateInParallel(containers, async (container, cancellationToken) =>
             {
                 var result = await MigrateAsync(storageClient, container, cancellationToken);
-                stats.Update(result, _assetOptions.DeleteMigrated);
+                stats.Update(result, null, _storageOptions.DeleteMigrated);
                 await writer.WriteAsync(stats, cancellationToken);
             },
             _globalOptions.BatchSize, cancellationToken);

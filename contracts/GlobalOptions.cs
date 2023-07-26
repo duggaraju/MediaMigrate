@@ -8,13 +8,27 @@ namespace MediaMigrate.Contracts
         string AccountName)
     {
         public const int DefaultBatchSize = 5;
-        public readonly string RunId = $"{DateTime.Now:HH_mm_ss}";
+        public const string PathSuffix = "MediaMigrate";
+
+
+        // The Run ID for the current run.
+        public static readonly string RunId = $"{DateTime.Now:HH_mm_ss}";
+        private string _logDirectory = Path.Combine(Path.GetTempPath(), PathSuffix);
 
         public string LogFile => Path.Combine(LogDirectory, $"MigrationLog_{RunId}.txt");
 
         public CloudType CloudType { get; set; } = CloudType.Azure;
 
-        public string LogDirectory { get; set; } = Path.Combine(Path.GetTempPath(), "MediaMigrate");
+        public string LogDirectory 
+        { 
+            get
+            {
+                if (!Directory.Exists(_logDirectory))
+                    Directory.CreateDirectory(_logDirectory);
+                return _logDirectory;
+            }
+            set => _logDirectory = value; 
+        }
 
         public LogLevel LogLevel { get; set; } = LogLevel.Warning;
 

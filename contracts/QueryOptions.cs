@@ -1,5 +1,8 @@
 ﻿namespace MediaMigrate.Contracts
 {
+    /// <summary>
+    /// Options for querying Azure Media Services entities using ODATA.
+    /// </summary>
     public record QueryOptions
     {
         public DateTime? CreatedAfter { get; set; }
@@ -32,5 +35,10 @@
             }
             return filter ?? Filter;
         }
+    }
+
+    public class StorageQueryOptions
+    {
+        public string ContainerPrefix { get; set; } = "asset-";
     }
 }

@@ -12,67 +12,6 @@ using System.Threading.Channels;
 
 namespace MediaMigrate.Ams
 {
-    record struct AssetStats()
-    {
-        private int _total = default;
-        private int _encrypted = default;
-        private int _streamable = default;
-        private int _successful = default;
-        private int _migrated = default;
-        private int _skipped = default;
-        private int _failed = default;
-        private int _deleted = default;
-
-        public readonly int Total => _total;
-
-        public readonly int Encrypted => _encrypted;
-
-        public readonly int Streamable => _streamable;
-
-        public readonly int Successful => _successful;
-
-        public readonly int Failed => _failed;
-
-        public readonly int Skipped => _skipped;
-
-        public readonly int Migrated => _migrated;
-
-        public readonly int Deleted => _deleted;
-
-        public void Update(MigrationResult result, bool deleteMigrated, MediaAssetStorageEncryptionFormat? format = null)
-        {
-            Interlocked.Increment(ref _total);
-            if (format != MediaAssetStorageEncryptionFormat.None)
-            {
-                Interlocked.Increment(ref _encrypted);
-            }
-            if (result.Format != null)
-            {
-                Interlocked.Increment(ref _streamable);
-            }
-            switch (result.Status)
-            {
-                case MigrationStatus.Success:
-                    Interlocked.Increment(ref _successful);
-                    if (deleteMigrated)
-                    {
-                        Interlocked.Increment(ref _deleted);
-                    }
-                    break;
-
-                case MigrationStatus.Skipped:
-                    Interlocked.Increment(ref _skipped);
-                    break;
-                case MigrationStatus.AlreadyMigrated:
-                    Interlocked.Increment(ref _migrated);
-                    break;
-                case MigrationStatus.Failure:
-                    Interlocked.Increment(ref _failed);
-                    break;
-            }
-        }
-    }
-
     internal class AssetMigrator : BaseMigrator
     {
         private readonly ILogger _logger;
@@ -102,11 +41,11 @@ namespace MediaMigrate.Ams
             var account = await GetMediaAccountAsync(cancellationToken);
             _logger.LogInformation("Begin migration of assets for account: {name}", account.Data.Name);
             var totalAssets = await QueryMetricAsync(
-account.Id.ToString(),
-"AssetCount",
-cancellationToken: cancellationToken);
+                account.Id.ToString(),
+                "AssetCount",
+                cancellationToken: cancellationToken);
 
-            var status = Channel.CreateBounded<double>(1);
+            var status = Channel.CreateBounded<AssetStats>(1);
             var progress = ShowProgressAsync("Asset Migration", "Assets", totalAssets, status.Reader, cancellationToken);
 
             var stats = await MigrateAsync(account, status.Writer, cancellationToken);
@@ -115,7 +54,7 @@ cancellationToken: cancellationToken);
             WriteSummary(ref stats);
         }
 
-        private async Task<AssetStats> MigrateAsync(MediaServicesAccountResource account, ChannelWriter<double> writer, CancellationToken cancellationToken)
+        private async Task<AssetStats> MigrateAsync(MediaServicesAccountResource account, ChannelWriter<AssetStats> writer, CancellationToken cancellationToken)
         {
             var storage = await _resourceProvider.GetStorageAccountAsync(account, cancellationToken);
             var stats = new AssetStats();
@@ -126,8 +65,8 @@ cancellationToken: cancellationToken);
             await MigrateInParallel(assets, async (asset, cancellationToken) =>
             {
                 var result = await MigrateAsync(account, storage, asset, cancellationToken);
-                stats.Update(result, _options.DeleteMigrated, asset.Data.StorageEncryptionFormat);
-                await writer.WriteAsync(stats.Total, cancellationToken);
+                stats.Update(result, asset.Data.StorageEncryptionFormat, _options.DeleteMigrated);
+                await writer.WriteAsync(stats, cancellationToken);
             }, _globalOptions.BatchSize, cancellationToken);
 
             writer.Complete();
@@ -150,7 +89,7 @@ cancellationToken: cancellationToken);
             _console.Write(table);
         }
 
-        public async Task<MigrationResult> MigrateAsync(
+        public async Task<AssetMigrationResult> MigrateAsync(
             MediaServicesAccountResource account,
             BlobServiceClient storage,
             MediaAssetResource asset,
@@ -164,7 +103,7 @@ cancellationToken: cancellationToken);
                 if (status.Status == MigrationStatus.Success)
                 {
                     _logger.LogDebug("Asset: {name} has already been migrated.", asset.Data.Name);
-                    return MigrationStatus.AlreadyMigrated;
+                    return status;
                 }
             }
 

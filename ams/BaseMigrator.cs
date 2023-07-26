@@ -79,12 +79,12 @@ namespace MediaMigrate.Ams
             return averageTotal;
     }
 
-        protected async Task ShowProgressAsync(
+        protected async Task ShowProgressAsync<T>(
             string description,
             string unit,
             double totalValue,
-            ChannelReader<double> reader,
-            CancellationToken cancellationToken)
+            ChannelReader<T> reader,
+            CancellationToken cancellationToken) where T : IStats
         {
             await _console
                 .Progress()
@@ -104,12 +104,12 @@ namespace MediaMigrate.Ams
                 context.Refresh();
                 await foreach (var value in reader.ReadAllAsync(cancellationToken))
                 {
-                    if (value > task.MaxValue)
+                    if (value.Total > task.MaxValue)
                     {
-                        task.MaxValue = value;
+                        task.MaxValue = value.Total;
                     }
 
-                    task.Value = value;
+                    task.Value = value.Total;
                     context.Refresh();
                 }
             });

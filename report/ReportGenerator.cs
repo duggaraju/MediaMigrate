@@ -8,6 +8,7 @@ namespace MediaMigrate.Report
     {
         private readonly TextWriter _writer;
         public readonly string FileName;
+        private readonly object _lock = new object();
 
         public ReportGenerator(string file, Stream stream)
         {
@@ -57,9 +58,9 @@ namespace MediaMigrate.Report
 </html>");
         }
 
-        public void WriteRows(IEnumerable<AnalysisResult> results)
+        public void WriteRow(AnalysisResult result)
         {
-            foreach (var result in results)
+            lock(_lock)
             {
                 _writer.Write($"<tr><td>{result.AssetName}</td><td>{result.Status}</td><td>");
                 if (result.Uri != null)

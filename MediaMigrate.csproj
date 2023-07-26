@@ -19,7 +19,7 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryUrl>https://github.com/duggaraju/MediaMigrate</RepositoryUrl>
     <PackageTags>Media;Migration;AMS;Azure;Media;Services;MediaMigrate;AWS;S3;Storage</PackageTags>
-    <Version>1.0.3</Version>
+    <Version>1.0.5</Version>
   </PropertyGroup>
 
   <ItemGroup>
@@ -27,8 +27,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="AWSSDK.MediaConvert" Version="3.7.200.2" />
-    <PackageReference Include="AWSSDK.S3" Version="3.7.201" />
+    <PackageReference Include="AWSSDK.MediaConvert" Version="3.7.201.1" />
+    <PackageReference Include="AWSSDK.S3" Version="3.7.201.2" />
     <PackageReference Include="Azure.Identity" Version="1.9.0" />
     <PackageReference Include="Azure.Monitor.Query" Version="1.2.0" />
     <PackageReference Include="Azure.ResourceManager.Media" Version="1.2.0" />

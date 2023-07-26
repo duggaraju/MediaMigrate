@@ -7,7 +7,7 @@ namespace MediaMigrate.Transform
     internal class UploadTransform : StorageTransform
     {
         public UploadTransform(
-            AssetOptions options,
+            StorageOptions options,
             IUploader uploader,
             ILogger<UploadTransform> logger,
             TemplateMapper templateMapper) :

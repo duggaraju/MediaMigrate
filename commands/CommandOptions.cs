@@ -14,7 +14,7 @@ namespace MediaMigrate.Commands
             aliases: new[] { "--created-after" },
             description: @"Query entities created after given date.");
 
-        private static readonly Option<string?> _filter = new Option<string?>(
+        private static readonly Option<string?> _filter = new(
             aliases: new[] { "--filter", "-f" },
             description: @"An ODATA condition to filter the resources.
 e.g.: ""name eq 'asset1'"" to match an asset with name 'asset1'.
@@ -25,6 +25,20 @@ Visit https://learn.microsoft.com/en-us/azure/media-services/latest/filter-order
             command.AddOption(_createdAfter);
             command.AddOption(_createdBefore);
             command.AddOption(_filter);
+            return command;
+        }
+
+        static readonly Option<string> _containerPrefix = new(
+            new[] { "-p", "--prefix" },
+            () => "asset-",
+            description: "The prefix for container names to filter")
+        {
+            IsRequired = false,
+        };
+
+        public static Command AddStorageQueryOptions(this Command command)
+        {
+            command.AddOption(_containerPrefix);
             return command;
         }
 
@@ -61,7 +75,6 @@ e.g: For Azure specify the storage account name or the URL <https://accountname.
 
         private static readonly Option<string?> _workingDirectory = new(
             aliases: new[] { "-w", "--working-directory" },
-            () => Path.Combine(Path.GetTempPath(), "MediaMigrate"),
             description: @"The working directory to use for migration.")
         {
             IsRequired = false
@@ -89,10 +102,13 @@ e.g: For Azure specify the storage account name or the URL <https://accountname.
 
         private static readonly Option<int> _batchSize = new(
             aliases: new[] { "--batch-size", "-b" },
-            () => GlobalOptions.DefaultBatchSize,
             description: @"Batch size for parallel processing.");
 
         const int DefaultSegmentDurationInSeconds = 6;
+        private static readonly Option<int?> _segmentDuration = new(
+            aliases: new[] { "--segment-duration" },
+            () => DefaultSegmentDurationInSeconds,
+            description: "The segment duration to use for streaming");
 
         public static Command AddMigrationOptions(this Command command)
         {
@@ -102,10 +118,11 @@ e.g: For Azure specify the storage account name or the URL <https://accountname.
             command.AddOption(_workingDirectory);
             command.AddOption(_copyNonStreamable);
             command.AddOption(_batchSize);
+            command.AddOption(_segmentDuration);
             return command;
         }
 
-        private static readonly Option<LogLevel> _logLevel = new Option<LogLevel>(
+        private static readonly Option<LogLevel> _logLevel = new(
             aliases: new[] { "--log-level", "-v" },
 #if DEBUG
             getDefaultValue: () => LogLevel.Debug,
@@ -115,19 +132,18 @@ e.g: For Azure specify the storage account name or the URL <https://accountname.
             description: "The log level for logging"
             );
 
-        private static readonly Option<string?> _logDirectory = new Option<string?>(
+        private static readonly Option<string?> _logDirectory = new(
             aliases: new[] { "-l", "--log-directory" },
-            getDefaultValue: () => Path.GetTempPath(),
             description: @"The directory where the logs are written. Defaults to the temporary directory"
             );
 
-        private static readonly Option<bool> _daemonMode = new Option<bool>(
+        private static readonly Option<bool> _daemonMode = new(
             aliases: new[] { "-d", "--daemon-mode" },
             getDefaultValue: () => false,
             description: @"Run in daemon mode and do not use ASCII graphics."
             );
 
-        private static readonly Option<string> _subscription = new Option<string>(
+        private static readonly Option<string> _subscription = new(
             aliases: new[] { "--subscription", "-s" },
             description: "The azure subscription to use")
         {
@@ -135,7 +151,7 @@ e.g: For Azure specify the storage account name or the URL <https://accountname.
             Arity = ArgumentArity.ExactlyOne
         };
 
-        private static readonly Option<string> _resourceGroup = new Option<string>(
+        private static readonly Option<string> _resourceGroup = new(
             aliases: new[] { "--resource-group", "-g" },
             description: "The resource group of the account beging migrated")
         {
@@ -143,7 +159,7 @@ e.g: For Azure specify the storage account name or the URL <https://accountname.
             Arity = ArgumentArity.ExactlyOne
         };
 
-        private static readonly Option<string> _accoutName = new Option<string>(
+        private static readonly Option<string> _accoutName = new(
             aliases: new[] { "--account-name", "-n" },
             description: @"The target Azure Media Services or Azure Storage Account being migrated.")
         {
@@ -151,7 +167,7 @@ e.g: For Azure specify the storage account name or the URL <https://accountname.
             Arity = ArgumentArity.ExactlyOne
         };
 
-        private static readonly Option<CloudType> _cloudType = new Option<CloudType>(
+        private static readonly Option<CloudType> _cloudType = new(
             aliases: new[] { "--cloud-type", "-c" },
             () => CloudType.Azure,
             description: @"The destination cloud you are migrating to.

@@ -18,13 +18,13 @@ namespace MediaMigrate.Transform
 
     internal abstract class StorageTransform : ITransform<AssetDetails, AssetMigrationResult>
     {
-        protected readonly AssetOptions _options;
+        protected readonly StorageOptions _options;
         private readonly TemplateMapper _templateMapper;
         protected readonly ILogger _logger;
         protected readonly IUploader _uploader;
 
         public StorageTransform(
-            AssetOptions options,
+            StorageOptions options,
             TemplateMapper templateMapper,
             IUploader uploader,
             ILogger logger)

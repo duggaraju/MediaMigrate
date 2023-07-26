@@ -12,5 +12,7 @@
         public AnalysisType AnalysisType { get; set; } = AnalysisType.Summary;
 
         public int BatchSize { get; set; } = 1;
+
+        public string ReportFileName => $"Report_{GlobalOptions.RunId}.html";
     }
 }

@@ -112,7 +112,7 @@ namespace MediaMigrate.Transform
         }
 
         const string ShakaLogPattern = @"\d+/\d+:(?<level>\w+):";
-        static readonly Regex ShakaLogRegEx = new Regex(ShakaLogPattern, RegexOptions.Compiled);
+        static readonly Regex ShakaLogRegEx = new(ShakaLogPattern, RegexOptions.Compiled);
         static readonly IDictionary<string, LogLevel> LogLevels = new Dictionary<string, LogLevel>
         {
             { "FATAL", LogLevel.Critical },

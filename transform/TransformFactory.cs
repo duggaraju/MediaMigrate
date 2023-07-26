@@ -24,7 +24,7 @@ namespace MediaMigrate.Transform
             _templateMapper = templateMapper;
         }
 
-        public IEnumerable<StorageTransform> GetStorageTransforms(AssetOptions options)
+        public IEnumerable<StorageTransform> GetStorageTransforms(StorageOptions options)
         {
             var uploader = _cloudProvider.GetStorageProvider(options);
             if (options.Packager != Packager.None)

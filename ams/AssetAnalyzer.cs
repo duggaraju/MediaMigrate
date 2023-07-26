@@ -13,22 +13,18 @@ using System.Collections.Concurrent;
 
 namespace MediaMigrate.Ams
 {
-    record struct Statistics(
-        int TotalAssets,
-        int StreamableAssets,
-        int NotMigrated,
-        int Migrated,
-        int Failed,
-        int Skipped,
-        int Encrypted);
-
     public record struct AnalysisResult(
         string AssetName,
         MediaAssetStorageEncryptionFormat? Encryption,
         MigrationStatus Status,
         string? Format,
         Uri? Uri,
-        string? ManifestName);
+        string? ManifestName)
+    {
+        public AnalysisResult(MediaAssetResource asset) :
+            this(asset.Data.Name, asset.Data.StorageEncryptionFormat, MigrationStatus.NotMigrated, null, null, null)
+        {}
+    }
 
     internal class AssetAnalyzer : BaseMigrator
     {
@@ -53,7 +49,7 @@ namespace MediaMigrate.Ams
 
         private async Task<AnalysisResult> AnalyzeAsync(MediaAssetResource asset, BlobServiceClient storage, CancellationToken cancellationToken)
         {
-            var result = new AnalysisResult(asset.Data.Name, asset.Data.StorageEncryptionFormat, MigrationStatus.NotMigrated, null, null, null);
+            var result = new AnalysisResult(asset);
             _logger.LogDebug("Analyzing asset: {asset}", asset.Data.Name);
             try
             {
@@ -67,7 +63,7 @@ namespace MediaMigrate.Ams
                 }
 
                 var migrationStatus = await _tracker.GetMigrationStatusAsync(container, cancellationToken);
-                result.Status = migrationStatus.Status;
+                result.Status = migrationStatus.Status == MigrationStatus.Success ? MigrationStatus.AlreadyMigrated : migrationStatus.Status;
                 result.Uri = migrationStatus.Uri;
 
                 if (_analysisOptions.AnalysisType == AnalysisType.Detailed)
@@ -95,45 +91,11 @@ namespace MediaMigrate.Ams
             return result;
         }
 
-        private static void AggregateResult(AnalysisResult result, ref Statistics statistics, IDictionary<string, int> assetTypes)
+        private static void AggregateResult(AnalysisResult result, AssetStats statistics, ConcurrentDictionary<string, int> assetTypes)
         {
-            statistics.TotalAssets++;
-            if (result.Format != null)
-            {
-                statistics.StreamableAssets++;
-            }
-
-            if (result.Encryption != MediaAssetStorageEncryptionFormat.None)
-            {
-                statistics.Encrypted++;
-            }
-
+            statistics.Update(result.Status, result.Format != null, false, result.Encryption);
             var format = string.IsNullOrEmpty(result.Format) ? "unknown" : result.Format!;
-            if (assetTypes.ContainsKey(format))
-            {
-                assetTypes[format] += 1;
-            }
-            else
-            {
-                assetTypes.Add(format, 1);
-            }
-
-            switch (result.Status)
-            {
-                case MigrationStatus.NotMigrated:
-                    statistics.NotMigrated++;
-                    break;
-                case MigrationStatus.Success:
-                case MigrationStatus.AlreadyMigrated:
-                    statistics.Migrated++;
-                    break;
-                case MigrationStatus.Skipped:
-                    statistics.Skipped++;
-                    break;
-                case MigrationStatus.Failure:
-                    statistics.Failed++;
-                    break;
-            }
+            assetTypes.AddOrUpdate(format, 1, (format, count) => Interlocked.Increment(ref count));
         }
 
         public override async Task MigrateAsync(CancellationToken cancellationToken)
@@ -150,7 +112,7 @@ namespace MediaMigrate.Ams
 
             if (_analysisOptions.AnalysisType == AnalysisType.Report)
             {
-                var filename = Path.Combine(_globalOptions.LogDirectory, $"Report_{DateTime.Now:hh-mm-ss}.html");
+                var filename = Path.Combine(_globalOptions.LogDirectory, _analysisOptions.ReportFileName);
                 var file = File.OpenWrite(filename);
                 var styleSheet = Path.Combine(_globalOptions.LogDirectory, StyleSheetName);
                 reportGenerator = new ReportGenerator(filename, file);
@@ -162,10 +124,10 @@ namespace MediaMigrate.Ams
             }
             var assets = account.GetMediaAssets()
                 .GetAllAsync(_analysisOptions.GetFilter(), cancellationToken: cancellationToken);
-            var statistics = new Statistics();
-            var assetTypes = new SortedDictionary<string, int>();
+            var statistics = new AssetStats();
+            var assetTypes = new ConcurrentDictionary<string, int>();
 
-            var channel = Channel.CreateBounded<double>(1);
+            var channel = Channel.CreateBounded<AssetStats>(1);
             var progress = ShowProgressAsync("Analyzing Assets", "Assets", totalAssets, channel.Reader, cancellationToken);
             var writer = channel.Writer;
             var currentYear = DateTimeOffset.Now.Year;
@@ -174,8 +136,9 @@ namespace MediaMigrate.Ams
                 var year = asset.Data.CreatedOn?.Year ?? currentYear;
                 assetsByYear.AddOrUpdate(year, 1, (key, value) => Interlocked.Increment(ref value));
                 var result = await AnalyzeAsync(asset, storage, cancellationToken);
-                AggregateResult(result, ref statistics, assetTypes);
-                await writer.WriteAsync(statistics.TotalAssets, cancellationToken);
+                AggregateResult(result, statistics, assetTypes);
+                await writer.WriteAsync(statistics, cancellationToken);
+                reportGenerator?.WriteRow(result);
             }, _analysisOptions.BatchSize, cancellationToken);
 
             writer.Complete();
@@ -195,15 +158,15 @@ namespace MediaMigrate.Ams
             }
         }
 
-        private void WriteSummary(Statistics statistics)
+        private void WriteSummary(AssetStats statistics)
         {
             var table = new Table()
                 .Title("[yellow]Asset Summary[/]")
                 .HideHeaders()
                 .AddColumn(string.Empty)
                 .AddColumn(string.Empty)
-                .AddRow("[yellow]Total[/]", $"{statistics.TotalAssets}")
-                .AddRow("[darkgreen]Streamable[/]", $"{statistics.StreamableAssets}")
+                .AddRow("[yellow]Total[/]", $"{statistics.Total}")
+                .AddRow("[darkgreen]Streamable[/]", $"{statistics.Streamable}")
                 .AddRow("[grey]Encrypted[/]", $"{statistics.Encrypted}")
                 .AddRow("[grey]Not Migrated[/]", $"{statistics.NotMigrated}")
                 .AddRow("[green]Migrated[/]", $"{statistics.Migrated}")

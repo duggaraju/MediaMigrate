@@ -47,7 +47,7 @@ namespace MediaMigrate.Ams
         const string TemplateRegularExpression = @"\${(?<key>\w+)}";
 
         static readonly Regex _regEx =
-            new Regex(TemplateRegularExpression, RegexOptions.Compiled | RegexOptions.IgnoreCase);
+            new(TemplateRegularExpression, RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
         public TemplateMapper(ILogger<TemplateMapper> logger)
         {
