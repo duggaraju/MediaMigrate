@@ -54,7 +54,7 @@ namespace MediaMigrate.Transform
                 return result;
             }
 
-            if (IsSupported(details))
+            if (await IsSupportedAsync(details, cancellationToken))
             {
                 var path = await TransformAsync(details, outputPath, cancellationToken);
                 result.Status = MigrationStatus.Success;
@@ -64,7 +64,7 @@ namespace MediaMigrate.Transform
             return result;
         }
 
-        protected abstract bool IsSupported(AssetDetails details);
+        protected abstract Task<bool> IsSupportedAsync(AssetDetails details, CancellationToken cancellationToken);
 
         protected abstract Task<string> TransformAsync(
             AssetDetails details,

@@ -56,7 +56,6 @@ namespace MediaMigrate.Ams
 
         private async Task<AssetStats> MigrateAsync(MediaServicesAccountResource account, ChannelWriter<AssetStats> writer, CancellationToken cancellationToken)
         {
-            var storage = await _resourceProvider.GetStorageAccountAsync(account, cancellationToken);
             var stats = new AssetStats();
             var orderBy = "properties/created";
             var assets = account.GetMediaAssets()
@@ -64,7 +63,7 @@ namespace MediaMigrate.Ams
 
             await MigrateInParallel(assets, async (asset, cancellationToken) =>
             {
-                var result = await MigrateAsync(account, storage, asset, cancellationToken);
+                var result = await MigrateAsync(account, asset, cancellationToken);
                 stats.Update(result, asset.Data.StorageEncryptionFormat, _options.DeleteMigrated);
                 await writer.WriteAsync(stats, cancellationToken);
             }, _globalOptions.BatchSize, cancellationToken);
@@ -91,12 +90,11 @@ namespace MediaMigrate.Ams
 
         public async Task<AssetMigrationResult> MigrateAsync(
             MediaServicesAccountResource account,
-            BlobServiceClient storage,
             MediaAssetResource asset,
             CancellationToken cancellationToken)
         {
             _logger.LogInformation("Migrating asset: {name} ...", asset.Data.Name);
-            var container = storage.GetContainer(asset);
+            var container = await _resourceProvider.GetStorageContainerAsync(account, asset, cancellationToken);
             if (_options.SkipMigrated)
             {
                 var status = await _tracker.GetMigrationStatusAsync(container, cancellationToken);

@@ -14,32 +14,49 @@ namespace MediaMigrate.Ams
         protected readonly ResourceGroupResource _resourceGroup;
         protected readonly GlobalOptions _globalOptions;
         protected readonly TokenCredential _credentials;
+        protected readonly ArmClient _armClient;
+
+        private readonly Dictionary<string, BlobServiceClient> _storageAccounts = new();
 
         public AzureResourceProvider(TokenCredential credential, GlobalOptions options)
         {
             _globalOptions = options;
             _credentials = credential;
-            var armClient = new ArmClient(credential);
+            _armClient = new ArmClient(credential);
             var resourceGroupId = ResourceGroupResource.CreateResourceIdentifier(
                 options.Subscription,
                 options.ResourceGroup);
-            _resourceGroup = armClient.GetResourceGroupResource(resourceGroupId);
+            _resourceGroup = _armClient.GetResourceGroupResource(resourceGroupId);
         }
 
         public async Task<MediaServicesAccountResource> GetMediaAccountAsync(
             CancellationToken cancellationToken)
         {
-            return await _resourceGroup.GetMediaServicesAccountAsync(
+            MediaServicesAccountResource account = await _resourceGroup.GetMediaServicesAccountAsync(
             _globalOptions.AccountName, cancellationToken);
+            foreach (var storage in account.Data.StorageAccounts)
+            {
+                var storageAccount = 
+                    await _armClient.GetStorageAccountResource(storage.Id).GetAsync(cancellationToken: cancellationToken);
+                _storageAccounts.Add(storage.Id.Name, GetStorageAccount(storageAccount));
+            }
+            return account;
         }
 
-        public async Task<BlobServiceClient> GetStorageAccountAsync(
+        public async ValueTask<BlobContainerClient> GetStorageContainerAsync(
             MediaServicesAccountResource account,
+            MediaAssetResource asset,
             CancellationToken cancellationToken)
         {
-            var storage = account.Data.StorageAccounts[0];
-            var resource = await _resourceGroup.GetStorageAccountAsync(storage.Id.Name, cancellationToken: cancellationToken);
-            return GetStorageAccount(resource);
+            if (!_storageAccounts.TryGetValue(asset.Data.StorageAccountName, out var storageAccount))
+            {
+                var storage = account.Data.StorageAccounts.Single(a => a.Id.Name == asset.Data.StorageAccountName);
+                var resource = _armClient.GetStorageAccountResource(storage.Id);
+                resource = await resource.GetAsync(cancellationToken: cancellationToken);
+                storageAccount = GetStorageAccount(resource);
+                return GetStorageAccount(resource).GetBlobContainerClient(asset.Data.Container);
+            }
+            return storageAccount.GetBlobContainerClient(asset.Data.Container);
         }
 
         public async Task<(BlobServiceClient, ResourceIdentifier)> GetStorageAccount(CancellationToken cancellationToken)

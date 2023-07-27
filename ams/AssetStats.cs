@@ -6,6 +6,10 @@ namespace MediaMigrate.Ams
     public interface IStats
     {
         int Total { get; }
+
+        int Successful { get; }
+
+        int Failed { get; }
     }
 
     record class AssetStats() : IStats

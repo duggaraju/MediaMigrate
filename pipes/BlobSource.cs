@@ -46,19 +46,27 @@ namespace MediaMigrate.Pipes
             {
                 BlobProperties properties = await _blobClient.GetPropertiesAsync(cancellationToken: cancellationToken);
                 // report update every 10%.
-                long update = 0;
                 const int UpdatePercentage = 10;
+                long update = 0;
                 var options = new BlobDownloadOptions
                 {
-                    ProgressHandler = new Progress<long>(
-                    progress =>
+                    ProgressHandler = new Progress<long>(progress =>
                     {
                         // report progress for every 10%.
                         var percentage = progress * 100 / properties.ContentLength;
                         if (percentage >= update)
                         {
-                            _logger.LogTrace(Events.BlobDownload, "Downloaded {percentage}% ({bytes}/{total}) of blob {blob}", percentage, progress, properties.ContentLength, _blobClient.Name);
-                            update += UpdatePercentage;
+                            lock (this)
+                            {
+                                if (percentage >= update)
+                                {
+                                    _logger.LogDebug(
+                                        Events.BlobDownload,
+                                        "Downloaded {percentage}% ({bytes}/{total}) of blob {blob}",
+                                        percentage, progress, properties.ContentLength, _blobClient.Name);
+                                    update += UpdatePercentage;
+                                }
+                            }
                         }
                     })
                 };

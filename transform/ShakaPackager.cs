@@ -32,15 +32,14 @@ namespace MediaMigrate.Transform
         // Shaka packager cannot handle smooth input.
         protected override FileType GetInputFileType(Manifest manifest)
         {
-            // TODO: issue when using pipe for transmuxed input.
-            return manifest.Format == "fmp4" ? FileType.Pipe : FileType.Pipe;
+            return FileType.Pipe;
         }
 
         protected override bool NeedsTransMux(Manifest manifest, ClientManifest? clientManifest)
         {
             if (manifest.Format == "fmp4")
             {
-                _logger.LogWarning("Shaka packager doesn't support smooth streaming assets with multiple tracks in single file. Transmuxing into CMAF file.");
+                _logger.LogWarning("Shaka packager doesn't support smooth streaming assets with multiple tracks in single file. Transmuxing into single track CMAF file.");
                 return true;
             }
             return base.NeedsTransMux(manifest, clientManifest);
@@ -52,11 +51,10 @@ namespace MediaMigrate.Transform
             return RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? FileType.File : FileType.Pipe;
         }
 
-        private string GetArguments(Manifest manifest, IList<PackagerInput> inputs, IList<PackagerOutput> outputs, IList<PackagerOutput> manifests)
+        private IEnumerable<string> GetArguments(Manifest manifest, IList<PackagerInput> inputs, IList<PackagerOutput> outputs, IList<PackagerOutput> manifests)
         {
-            var usePipe = GetInputFileType(manifest) == FileType.Pipe || GetOutputFileType(manifest) == FileType.Pipe;
             var i = 0;
-            var tracks = inputs
+            var arguments = inputs
                 .SelectMany(item =>
                 {
                     return item.Tracks.Select(track =>
@@ -66,12 +64,26 @@ namespace MediaMigrate.Transform
                         var language = string.IsNullOrEmpty(track.SystemLanguage) || track.SystemLanguage == "und" ? string.Empty : $"language={track.SystemLanguage}";
                         return $"stream={stream},in={item.FilePath},out={outputs[i].FilePath},playlist_name={manifests[i++].FilePath},{language}";
                     });
-                });
-            var dash = manifests[manifests.Count - 1].FilePath;
-            var hls = manifests[manifests.Count - 2].FilePath;
+                }).ToList();
+
+            var usePipe = GetInputFileType(manifest) == FileType.Pipe || GetOutputFileType(manifest) == FileType.Pipe;
+            if (usePipe)
+            {
+                arguments.Add("--io_block_size");
+                arguments.Add("65536");
+            }
+
             var vlog = 0;
-            var extraArgs = $"{(usePipe ? "--io_block_size 65536" : string.Empty)} --vmodule=*={vlog}";
-            return $"{extraArgs} {string.Join(" ", tracks)} --segment_duration {_options.SegmentDuration} --mpd_output {dash} --hls_master_playlist_output {hls}";
+            arguments.Add($"--vmodule=*={vlog}");
+            arguments.Add("--temp_dir");
+            arguments.Add(_options.WorkingDirectory);
+
+            arguments.Add("--mpd_output");
+            arguments.Add(manifests[manifests.Count - 1].FilePath);
+
+            arguments.Add("--hls_master_playlist_output");
+            arguments.Add(manifests[manifests.Count - 2].FilePath);
+            return arguments;
         }
 
         public override Task<bool> PackageAsync(

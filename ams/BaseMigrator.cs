@@ -86,6 +86,7 @@ namespace MediaMigrate.Ams
             ChannelReader<T> reader,
             CancellationToken cancellationToken) where T : IStats
         {
+            var statusColumn = new StatusColumn(unit);
             await _console
                 .Progress()
                 .AutoRefresh(true)
@@ -94,23 +95,22 @@ namespace MediaMigrate.Ams
                 .Columns(
                     new TaskDescriptionColumn(),
                     new ProgressBarColumn(),
-                    new StatusColumn(unit),
+                    statusColumn,
                     new PercentageColumn(),
                     new ElapsedTimeColumn(),
                     new SpinnerColumn())
             .StartAsync(async context =>
             {
                 var task = context.AddTask(description, maxValue: totalValue);
-                context.Refresh();
                 await foreach (var value in reader.ReadAllAsync(cancellationToken))
                 {
+                    statusColumn.Update(value);
                     if (value.Total > task.MaxValue)
                     {
                         task.MaxValue = value.Total;
                     }
 
                     task.Value = value.Total;
-                    context.Refresh();
                 }
             });
         }

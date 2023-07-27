@@ -47,13 +47,13 @@ namespace MediaMigrate.Ams
             _logger = logger;
         }
 
-        private async Task<AnalysisResult> AnalyzeAsync(MediaAssetResource asset, BlobServiceClient storage, CancellationToken cancellationToken)
+        private async Task<AnalysisResult> AnalyzeAsync(MediaServicesAccountResource account, MediaAssetResource asset, CancellationToken cancellationToken)
         {
             var result = new AnalysisResult(asset);
             _logger.LogDebug("Analyzing asset: {asset}", asset.Data.Name);
             try
             {
-                var container = storage.GetContainer(asset);
+                var container = await _resourceProvider.GetStorageContainerAsync(account, asset, cancellationToken);
                 if (!await container.ExistsAsync(cancellationToken))
                 {
 
@@ -107,7 +107,6 @@ namespace MediaMigrate.Ams
             _logger.LogInformation("Begin analysis of assets for account: {name}", _globalOptions.AccountName);
             var account = await GetMediaAccountAsync(cancellationToken);
             double totalAssets = await QueryMetricAsync(account.Id.ToString(), "AssetCount", cancellationToken);
-            var storage = await _resourceProvider.GetStorageAccountAsync(account, cancellationToken);
             ReportGenerator? reportGenerator = null;
 
             if (_analysisOptions.AnalysisType == AnalysisType.Report)
@@ -135,7 +134,7 @@ namespace MediaMigrate.Ams
             {
                 var year = asset.Data.CreatedOn?.Year ?? currentYear;
                 assetsByYear.AddOrUpdate(year, 1, (key, value) => Interlocked.Increment(ref value));
-                var result = await AnalyzeAsync(asset, storage, cancellationToken);
+                var result = await AnalyzeAsync(account, asset, cancellationToken);
                 AggregateResult(result, statistics, assetTypes);
                 await writer.WriteAsync(statistics, cancellationToken);
                 reportGenerator?.WriteRow(result);

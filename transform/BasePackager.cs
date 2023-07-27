@@ -143,16 +143,26 @@ namespace MediaMigrate.Transform
             IList<PackagerOutput> manifests,
             CancellationToken cancellationToken);
 
+        private static string Escape(string argument)
+        {
+            if (argument.Contains(' '))
+            {
+                return $"\"{argument}\"";
+            }
+            return argument;
+        }
+
         protected Process StartProcess(
             string command,
-            string arguments,
+            IEnumerable<string> arguments,
             Action<int> onExit,
             Action<string?> stdOut,
             Action<string?> stdError)
         {
             _logger.LogDebug("Starting packager {command}...", command);
-            _logger.LogTrace("Packager arguments: {args}", arguments);
-            var processStartInfo = new ProcessStartInfo(command, arguments)
+            var argumentString = string.Join(" ", arguments.Select(Escape));
+            _logger.LogTrace("Packager arguments: {args}", argumentString);
+            var processStartInfo = new ProcessStartInfo(command, argumentString)
             {
                 CreateNoWindow = true,
                 UseShellExecute = false,

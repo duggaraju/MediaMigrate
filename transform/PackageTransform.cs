@@ -20,17 +20,16 @@ namespace MediaMigrate.Transform
         }
 
         // If manifest is present then we can package it.
-        protected override bool IsSupported(AssetDetails details)
+        protected override async Task<bool> IsSupportedAsync(AssetDetails details, CancellationToken cancellationToken)
         {
             if (details.Manifest == null)
             {
+                if  (_options.PackageSingleFile)
+                {
+                    var blobs = await details.Container.GetListOfBlobsAsync(cancellationToken);
+                    return blobs.Count() == 1;
+                }
                 _logger.LogDebug("Packaging asset {asset} without manifest is not supported!", details.AssetName);
-                return false;
-            }
-
-            if (details.DecryptionInfo != null)
-            {
-                _logger.LogWarning("Packaging encrypted asset {asset} is not supported!", details.AssetName);
                 return false;
             }
 

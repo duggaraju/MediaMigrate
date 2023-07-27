@@ -16,8 +16,8 @@ namespace MediaMigrate.Transform
         }
 
         // simple upload is supported except for live/live archive assets.
-        protected override bool IsSupported(AssetDetails details)
-            => details.Manifest == null || !(details.Manifest.IsLive || details.Manifest.IsLiveArchive);
+        protected override Task<bool> IsSupportedAsync(AssetDetails details, CancellationToken cancellationToken)
+            => Task.FromResult(details.Manifest == null || !(details.Manifest.IsLive || details.Manifest.IsLiveArchive));
 
         protected override async Task<string> TransformAsync(
             AssetDetails details,

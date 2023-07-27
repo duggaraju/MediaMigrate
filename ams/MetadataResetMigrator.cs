@@ -42,14 +42,13 @@ namespace MediaMigrate.Ams
             var status = Channel.CreateBounded<AssetStats>(1);
             var progress = ShowProgressAsync("Asset metadata reset", "Assets", totalAssets, status.Reader, cancellationToken);
 
-            var storage = await _resourceProvider.GetStorageAccountAsync(account, cancellationToken);
             var stats = new AssetStats();
             var orderBy = "properties/created";
             var assets = account.GetMediaAssets()
                 .GetAllAsync(_options.GetFilter(), orderby: orderBy, cancellationToken: cancellationToken);
             await MigrateInParallel(assets, async (asset, cancelllationToken) =>
             {
-                await ResetAsync(storage, asset, cancellationToken);
+                await ResetAsync(account, asset, cancellationToken);
                 stats.Update(MigrationStatus.Success, false, false);
                 await status.Writer.WriteAsync(stats, cancellationToken);
             }, _globalOptions.BatchSize, cancellationToken);
@@ -59,10 +58,13 @@ namespace MediaMigrate.Ams
             await progress;
         }
 
-        private async ValueTask ResetAsync(BlobServiceClient storage, MediaAssetResource asset, CancellationToken cancellationToken)
+        private async ValueTask ResetAsync(
+            MediaServicesAccountResource account,
+            MediaAssetResource asset,
+            CancellationToken cancellationToken)
         {
             _logger.LogDebug("Reset metadata for asset {name}", asset.Data.Name);
-            var container = storage.GetContainer(asset);
+            var container = await _resourceProvider.GetStorageContainerAsync(account, asset, cancellationToken);
             await _tracker.ResetMigrationStatus(container, cancellationToken);
         }
     }
