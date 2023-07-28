@@ -29,7 +29,7 @@ Visit https://learn.microsoft.com/en-us/azure/media-services/latest/filter-order
         }
 
         static readonly Option<string> _containerPrefix = new(
-            new[] { "-p", "--prefix" },
+            new[] { "-p", "--container-prefix" },
             () => "asset-",
             description: "The prefix for container names to filter")
         {

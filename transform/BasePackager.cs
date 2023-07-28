@@ -43,6 +43,8 @@ namespace MediaMigrate.Transform
         protected readonly TransMuxer _transMuxer;
         protected readonly ILogger _logger;
         protected readonly StorageOptions _options;
+        protected double _minTimeStamp;
+        protected double _maxDelta;
 
         public BasePackager(StorageOptions options, TransMuxer transMuxer, ILogger logger)
         {
@@ -64,10 +66,21 @@ namespace MediaMigrate.Transform
 
         protected List<PackagerInput> GetInputs(Manifest manifest, ClientManifest? clientManifest, string workingDirectory)
         {
-            var inputs = new List<PackagerInput>();
+            if (clientManifest != null)
+            {
+                var timeStamps = clientManifest.Streams
+                    .Where(s => s.Type == StreamType.Video || s.Type == StreamType.Audio)
+                    .Select(stream => (stream.Type, stream.Chunks[0].Time / (float)stream.TimeScale))
+                    .ToArray();
+                _minTimeStamp = timeStamps.Min(s => s.Item2);
+                var max = timeStamps.Max(s => s.Item2);
+                _maxDelta = max - _minTimeStamp;
+            }
+
             var fileType = GetInputFileType(manifest);
             var needsTransMux = NeedsTransMux(manifest, clientManifest);
 
+            var inputs = new List<PackagerInput>();
             foreach (var track in manifest.Tracks)
             {
                 var extension = track.IsMultiFile ? (track is TextTrack ? VTT_FILE : MEDIA_FILE) : string.Empty;
@@ -220,19 +233,34 @@ namespace MediaMigrate.Transform
             {
                 if (tracks.Count == 1)
                 {
-                    if (tracks[0] is TextTrack)
+                    var track = tracks[0];
+                    var (stream, _) = assetDetails.ClientManifest!.GetStream(track);
+                    var start = stream.GetStartTime();
+                    var options = new TransMuxOptions
                     {
-                        source = new TtmlToVttTransmuxer(_transMuxer, source, _logger);
+                        TrackId = track.TrackId,
+                        Channel = track is VideoTrack ? Channel.Video :  track is AudioTrack ? Channel.Audio : Channel.Subtitle,
+                        Offset = start - _minTimeStamp
+                    };
+
+                    if (track is TextTrack)
+                    {
+                        source = new TtmlToVttTransmuxer(_transMuxer, source, _logger, options);
                     }
                     else
                     {
-                        var trackId = tracks[0].TrackId;
-                        source = new IsmvToCmafMuxer(_transMuxer, source, trackId, _logger);
+                        //source = new IsmvToCmafMuxer(_transMuxer, source, options, _logger);
+                        source = new FfmpegIsmvToMp4Muxer(_transMuxer, source, options);
                     }
                 }
                 else
                 {
-                    source = new FfmpegIsmvToMp4Muxer(_transMuxer, source, Channel.Both);
+                    var options = new TransMuxOptions
+                    {
+                        Channel = Channel.Both,
+                        FastStart = input.Type == FileType.Pipe
+                    };
+                    source = new FfmpegIsmvToMp4Muxer(_transMuxer, source, options);
                 }
             }
 

@@ -12,6 +12,14 @@ using System.Text;
 
 namespace MediaMigrate.Transform
 {
+    public record struct TransMuxOptions (
+        int TrackId,
+        bool Dash,
+        bool FastStart,
+        Channel Channel,
+        double Offset
+    );
+
     internal class TransMuxer
     {
         private readonly ILogger _logger;
@@ -26,22 +34,21 @@ namespace MediaMigrate.Transform
             return await FFProbe.AnalyseAsync(uri, null, cancellationToken);
         }
 
-        private static void AddMuxingOptions(FFMpegArgumentOptions options, Channel channel, string? customArguments)
+        private static void AddMp4MuxingOptions(FFMpegArgumentOptions args, TransMuxOptions options)
         {
-            var frag = channel == Channel.Audio ? "-frag_duration 2 " : string.Empty;
-            options
+            args
                 .ForceFormat("mp4")
-                .CopyChannel(channel)
-                .WithCustomArgument(customArguments ?? string.Empty);
-            if (channel != Channel.Both)
+                .CopyChannel(options.Channel)
+                .WithCustomArgument(GetCustomArguments(options));
+            if (options.Channel != Channel.Both)
             {
-                options.SelectStream(0, channel: channel);
+                args.SelectStream(0, channel: options.Channel);
             }
         }
 
         private async Task RunFfmpeg(FFMpegArgumentProcessor processor, CancellationToken cancellationToken)
         {
-            _logger.LogDebug(Events.Ffmpeg, "Running ffmpeg {args}", processor.Arguments);
+            _logger.LogTrace(Events.Ffmpeg, "Running ffmpeg {args}", processor.Arguments);
             await processor
                 .NotifyOnOutput(line => _logger.LogTrace(Events.Ffmpeg, "{line}", line))
             .NotifyOnError(line => _logger.LogTrace(Events.Ffmpeg, "{line}", line))
@@ -83,26 +90,30 @@ namespace MediaMigrate.Transform
             await RunFfmpeg(processor, cancellationToken);
         }
 
-        private static string GetCustomArguments(Channel channel, bool dash, bool faststart = true)
+        private static string GetCustomArguments(TransMuxOptions options)
         {
-            return dash ?
+            return options.Dash ?
                 "-movflags +dash+delay_moov+skip_trailer+skip_sidx+frag_keyframe  -frag_duration 2" :
-                faststart ? "-movflags faststart" : string.Empty;
+                options.FastStart ? "-movflags faststart" : string.Empty;
         }
 
-        public async Task TransMuxAsync(IPipeSource source, string destination, Channel channel, CancellationToken cancellationToken, bool dash = false)
+        public async Task TransMuxAsync(IPipeSource source, string destination, TransMuxOptions options, CancellationToken cancellationToken)
         {
             var processor = FFMpegArguments
-                .FromPipeInput(source)
-                .OutputToFile(destination, overwrite: true, options => AddMuxingOptions(options, channel, GetCustomArguments(channel, false, false)));
+                .FromPipeInput(source, args =>
+                {
+                    if (options.Offset != 0.0)
+                        args.WithCustomArgument($"-itsoffset {options.Offset}");
+                })
+                .OutputToFile(destination, overwrite: true, args => AddMp4MuxingOptions(args, options));
             await RunFfmpeg(processor, cancellationToken);
         }
 
-        public async Task PipedTransMuxAsync(IPipeSource source, IPipeSink destination, Channel channel, CancellationToken cancellationToken, bool dash = true)
+        public async Task PipedTransMuxAsync(IPipeSource source, IPipeSink destination, TransMuxOptions options, CancellationToken cancellationToken)
         {
             var processor = FFMpegArguments
-                .FromPipeInput(source)
-                .OutputToPipe(destination, options => AddMuxingOptions(options, channel, GetCustomArguments(channel, dash)));
+                .FromPipeInput(source, args => args.WithCustomArgument($"-itsoffset {options.Offset}"))
+                .OutputToPipe(destination, args => AddMp4MuxingOptions(args, options));
             await RunFfmpeg(processor, cancellationToken);
         }
 
@@ -145,8 +156,9 @@ namespace MediaMigrate.Transform
 
         static readonly TimeSpan MilliSecond = TimeSpan.FromMilliseconds(1);
 
-        public async Task TransMuxTTMLAsync(Stream input, Stream output, CancellationToken cancellationToken)
+        public async Task TransMuxTTMLAsync(Stream input, Stream output, TransMuxOptions options, CancellationToken cancellationToken)
         {
+            var firstTime  = TimeSpan.MinValue;
             var pool = MemoryPool<byte>.Shared;
             var header = new byte[8];
             using var vttWriter = new StreamWriter(output, Encoding.UTF8)
@@ -172,9 +184,15 @@ namespace MediaMigrate.Transform
                     var captions = TtmlCaptions.Parse(stream, _logger);
                     foreach (var caption in captions.Body.Captions)
                     {
+                        if (firstTime == TimeSpan.MinValue)
+                        {
+                            firstTime = caption.Start.Add(TimeSpan.FromSeconds(-options.Offset));
+                        }
+
+                        caption.Start -= firstTime;
+                        caption.End -= firstTime;
                         if (caption.Start > caption.End)
                         {
-
                             caption.End = caption.Start.Add(MilliSecond);
                         }
                         await vttWriter.WriteLineAsync($@"{caption.Start:hh\:mm\:ss\.fff} --> {caption.End:hh\:mm\:ss\.fff}");
@@ -189,7 +207,7 @@ namespace MediaMigrate.Transform
             }
         }
 
-        public async Task TransMuxSmoothAsync(Stream source, Stream destination, CancellationToken cancellationToken, int? trackId = null)
+        public async Task TransMuxSmoothAsync(Stream source, Stream destination, TransMuxOptions options, CancellationToken cancellationToken)
         {
             var pool = MemoryPool<byte>.Shared;
             var header = new byte[8];
@@ -221,7 +239,7 @@ namespace MediaMigrate.Transform
                     var moof = (MovieFragmentBox)BoxFactory.Parse(new BoxReader(stream));
                     var track = moof.Tracks.Single();
                     var theader = track.GetSingleChild<TrackFragmentHeaderBox>();
-                    if (theader.TrackId != trackId)
+                    if (theader.TrackId != options.TrackId)
                     {
                         skip = true;
                         continue;
@@ -260,10 +278,13 @@ namespace MediaMigrate.Transform
     class TtmlToVttTransmuxer : ChainPipeSource
     {
         private readonly TransMuxer _transMuxer;
+        private readonly TransMuxOptions _options;
 
-        public TtmlToVttTransmuxer(TransMuxer transMuxer, IPipeSource source, ILogger logger) : base(source, logger)
+        public TtmlToVttTransmuxer(TransMuxer transMuxer, IPipeSource source, ILogger logger, TransMuxOptions options) 
+            : base(source, logger)
         {
             _transMuxer = transMuxer;
+            _options = options;
         }
 
         public override string GetStreamArguments() => "-f webvtt";
@@ -272,7 +293,7 @@ namespace MediaMigrate.Transform
         {
             using (source)
             {
-                await _transMuxer.TransMuxTTMLAsync(source, destination, cancellationToken);
+                await _transMuxer.TransMuxTTMLAsync(source, destination, _options, cancellationToken);
             }
         }
     }
@@ -280,12 +301,12 @@ namespace MediaMigrate.Transform
     class IsmvToCmafMuxer : ChainPipeSource
     {
         private readonly TransMuxer _transMuxer;
-        private readonly int _trackId;
+        private readonly TransMuxOptions _options;
 
-        public IsmvToCmafMuxer(TransMuxer transMuxer, IPipeSource source, int trackId, ILogger logger) : base(source, logger)
+        public IsmvToCmafMuxer(TransMuxer transMuxer, IPipeSource source, TransMuxOptions options, ILogger logger) : base(source, logger)
         {
             _transMuxer = transMuxer;
-            _trackId = trackId;
+            _options = options;
         }
 
         public override string GetStreamArguments() => "-f mp4";
@@ -294,7 +315,7 @@ namespace MediaMigrate.Transform
         {
             using (client)
             {
-                await _transMuxer.TransMuxSmoothAsync(client, destination, cancellationToken, _trackId);
+                await _transMuxer.TransMuxSmoothAsync(client, destination, _options, cancellationToken);
             }
         }
     }
@@ -308,13 +329,13 @@ namespace MediaMigrate.Transform
     {
         private readonly TransMuxer _transMuxer;
         private readonly IPipeSource _from;
-        private readonly Channel _channel;
+        private TransMuxOptions _options;
 
-        public FfmpegIsmvToMp4Muxer(TransMuxer transMuxer, IPipeSource source, Channel channel)
+        public FfmpegIsmvToMp4Muxer(TransMuxer transMuxer, IPipeSource source, TransMuxOptions options)
         {
             _transMuxer = transMuxer;
             _from = source;
-            _channel = channel;
+            _options = options;
         }
 
         public string GetStreamArguments() => "-f mp4";
@@ -327,12 +348,12 @@ namespace MediaMigrate.Transform
                 Format = "mp4",
                 BlockSize = BlockSize
             };
-            await _transMuxer.PipedTransMuxAsync(_from, sink, _channel, cancellationToken);
+            await _transMuxer.PipedTransMuxAsync(_from, sink, _options, cancellationToken);
         }
 
         public async Task WriteToAsync(string destination, CancellationToken cancellationToken)
         {
-            await _transMuxer.TransMuxAsync(_from, destination, _channel, cancellationToken);
+            await _transMuxer.TransMuxAsync(_from, destination, _options, cancellationToken);
         }
 
         protected async Task TransformSource(Stream server, CancellationToken cancellationToken)
@@ -345,7 +366,7 @@ namespace MediaMigrate.Transform
             };
             using (server)
             {
-                await _transMuxer.PipedTransMuxAsync(_from, sink, _channel, cancellationToken, dash: false);
+                await _transMuxer.PipedTransMuxAsync(_from, sink, _options, cancellationToken);
             }
         }
     }

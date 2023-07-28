@@ -2,7 +2,6 @@
 using MediaMigrate.Log;
 using Microsoft.Extensions.Logging;
 using System.ComponentModel;
-using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 
@@ -10,8 +9,7 @@ namespace MediaMigrate.Transform
 {
     internal class ShakaPackager : BasePackager
     {
-        static readonly string PackagerPath =
-            Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!;
+        static readonly string PackagerPath = AppContext.BaseDirectory;
         static readonly string Packager = Path.Combine(PackagerPath, GetExecutableName());
 
         private readonly TaskCompletionSource<bool> _taskCompletionSource;
@@ -32,7 +30,7 @@ namespace MediaMigrate.Transform
         // Shaka packager cannot handle smooth input.
         protected override FileType GetInputFileType(Manifest manifest)
         {
-            return FileType.Pipe;
+            return manifest.IsLiveArchive ? FileType.File: FileType.Pipe;
         }
 
         protected override bool NeedsTransMux(Manifest manifest, ClientManifest? clientManifest)
@@ -41,6 +39,10 @@ namespace MediaMigrate.Transform
             {
                 _logger.LogWarning("Shaka packager doesn't support smooth streaming assets with multiple tracks in single file. Transmuxing into single track CMAF file.");
                 return true;
+            }
+            else if (manifest.IsLiveArchive)
+            {
+                return _maxDelta > 0.1;
             }
             return base.NeedsTransMux(manifest, clientManifest);
         }
@@ -125,25 +127,33 @@ namespace MediaMigrate.Transform
 
         const string ShakaLogPattern = @"\d+/\d+:(?<level>\w+):";
         static readonly Regex ShakaLogRegEx = new(ShakaLogPattern, RegexOptions.Compiled);
-        static readonly IDictionary<string, LogLevel> LogLevels = new Dictionary<string, LogLevel>
+
+        public static LogLevel GetLogLevel(string level)
         {
-            { "FATAL", LogLevel.Critical },
-            { "ERROR", LogLevel.Error },
-            { "WARN", LogLevel.Warning },
-            { "INFO", LogLevel.Information },
-            { "VERBOSE1", LogLevel.Trace },
-            { "VERBOSE2", LogLevel.Trace },
-        };
+            return level switch
+            {
+                "FATAL" => LogLevel.Critical,
+                "ERROR" => LogLevel.Error,
+                "INFO" => LogLevel.Trace,
+                "WARN" => LogLevel.Warning,
+                "VERBOSE1" => LogLevel.Trace,
+                "VERBOSE2" => LogLevel.Trace,
+                _ => LogLevel.Information
+            };
+        }
+
+        public static LogLevel GetLineLogLevel(string line)
+        {
+            var match = ShakaLogRegEx.Match(line);
+            var group = match.Groups["level"];
+            return match.Success && group.Success ? GetLogLevel(group.Value) : LogLevel.Information;
+        }
 
         private void LogProcessOutput(string? line)
         {
             if (line != null)
             {
-                var logLevel = LogLevel.Information;
-                var match = ShakaLogRegEx.Match(line);
-                var group = match.Groups["level"];
-                _ = match.Success && group.Success && LogLevels.TryGetValue(group.Value, out logLevel);
-                _logger.Log(logLevel, Events.ShakaPackager, line);
+                _logger.Log(GetLineLogLevel(line), Events.ShakaPackager, line);
             }
         }
 

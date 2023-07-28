@@ -125,6 +125,12 @@ namespace MediaMigrate.Ams
                     path += '/';
                 }
             }
+
+            const int MaxContainerName = 63; //Max name for a Azure storage container or an S3 bucket.
+            if (containerName.Length > MaxContainerName)
+            {
+                containerName.Substring(0, MaxContainerName);
+            }
             return (containerName, path);
         }
 

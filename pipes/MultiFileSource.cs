@@ -41,12 +41,12 @@ namespace MediaMigrate.Pipes
                 var increment = _track.ChunkCount / 10;
                 foreach (var chunk in _track.GetChunks())
                 {
-                    ++i;
                     if (i % increment == 0)
                     {
-                        _logger.LogDebug("Downloaded {i} / {total} blobs for track {stream}", i, _track.ChunkCount, _trackPrefix);
+                        _logger.LogDebug("Downloaded {i}/{total} blobs for track {stream}", i, _track.ChunkCount, _trackPrefix);
                     }
 
+                    ++i;
                     chunkName = $"{_trackPrefix}/{chunk}";
                     blob = _container.GetBlockBlobClient(chunkName);
                     if (await blob.ExistsAsync(cancellationToken))

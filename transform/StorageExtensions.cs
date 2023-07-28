@@ -11,7 +11,7 @@ namespace MediaMigrate.Transform
 {
     static class StorageExtensions
     {
-        public const string MigratedBlobName = "__migrated";
+        public const string MigratedBlobName = "__migrate";
         public const int PAGE_SIZE = 1024;
 
         // AMS specific files that can be excluded since they are of no use outside AMS.
@@ -22,7 +22,6 @@ namespace MediaMigrate.Transform
             ".ismx",
             ".mpi"
         };
-
 
         public static async Task<BlobItem[]?> LookupManifestBlobsAsync(
             this BlobContainerClient container,

@@ -190,6 +190,11 @@ namespace MediaMigrate.Contracts
             }
             return false;
         }
+
+        public double GetStartTime()
+        {
+            return Chunks[0].Time / (double)TimeScale;
+        }
     }
 
 

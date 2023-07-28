@@ -47,6 +47,7 @@ namespace MediaMigrate.Azure
             };
             ;
             await blob.UploadAsync(content, options, cancellationToken: cancellationToken);
+            _logger.LogDebug("Finished uploading {name} to {file}", blob.Name, fileName);
         }
 
         public async Task UploadBlobAsync(
@@ -57,6 +58,7 @@ namespace MediaMigrate.Azure
             var outputBlob = _container.GetBlockBlobClient(fileName);
             var operation = await outputBlob.StartCopyFromUriAsync(blob.Uri, cancellationToken: cancellationToken);
             await operation.WaitForCompletionAsync(cancellationToken);
+            _logger.LogDebug("Finished uploading {name} to {file}", blob.Name, fileName);
         }
     }
 

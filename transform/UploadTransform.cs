@@ -24,6 +24,7 @@ namespace MediaMigrate.Transform
             (string Container, string Prefix) outputPath,
             CancellationToken cancellationToken = default)
         {
+            _logger.LogDebug("Uploading files from asset {asset} ", details.AssetName);
             var fileUploader = await _uploader.GetUploaderAsync(outputPath.Container, cancellationToken);
             var (assetName, inputContainer, _, manifest, _) = details;
             var inputBlobs = await inputContainer.GetListOfBlobsAsync(cancellationToken, manifest);
