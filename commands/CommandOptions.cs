@@ -1,4 +1,5 @@
-﻿using MediaMigrate.Contracts;
+﻿using MediaMigrate.Ams;
+using MediaMigrate.Contracts;
 using Microsoft.Extensions.Logging;
 using System.CommandLine;
 
@@ -6,11 +7,18 @@ namespace MediaMigrate.Commands
 {
     static class CommandOptions
     {
-        private static readonly Option<DateOnly?> _createdBefore = new(
+        public static Command AddOptions(this Command command, params Option[] options)
+        {
+            Array.ForEach(options, option => command.AddOption(option));
+            return command;
+        }
+
+        #region AssetQueryOptions
+        private static readonly Option<DateTime?> _createdBefore = new(
             aliases: new[] { "--created-before" },
             description: @"Query entities created before given date.");
 
-        private static readonly Option<DateOnly?> _createdAfter = new(
+        private static readonly Option<DateTime?> _createdAfter = new(
             aliases: new[] { "--created-after" },
             description: @"Query entities created after given date.");
 
@@ -22,12 +30,19 @@ Visit https://learn.microsoft.com/en-us/azure/media-services/latest/filter-order
 
         public static Command AddQueryOptions(this Command command)
         {
-            command.AddOption(_createdAfter);
-            command.AddOption(_createdBefore);
-            command.AddOption(_filter);
-            return command;
+            command.AddValidator(result =>
+            {
+                if (result.FindResultFor(_filter) != null && 
+                result.FindResultFor(_createdAfter) != null || result.FindResultFor(_createdBefore) != null)
+                {
+                    result.ErrorMessage = $"Conflicting Options. Both date range and filter cannot be specified together. Specify only one.";
+                }
+            });
+            return command.AddOptions(_createdAfter, _createdBefore, _filter);
         }
+        #endregion
 
+        #region StorageQueryOptions
         static readonly Option<string> _containerPrefix = new(
             new[] { "-p", "--container-prefix" },
             () => "asset-",
@@ -41,6 +56,7 @@ Visit https://learn.microsoft.com/en-us/azure/media-services/latest/filter-order
             command.AddOption(_containerPrefix);
             return command;
         }
+        #endregion
 
         private static readonly Option<string> _storageAccount = new(
             aliases: new[] { "--storage-path", "-o" },
@@ -57,12 +73,32 @@ e.g: For Azure specify the storage account name or the URL <https://accountname.
             () => false,
             description: @"Overwrite the files in the destination.");
 
-        public static Command AddStorageOptions(this Command command, Option<string> pathTemplate)
+        public static Command AddStorageOptions(this Command command)
         {
-            command.AddOption(_storageAccount);
-            command.AddOption(_overwrite);
-            command.AddOption(pathTemplate);
-            return command;
+            return command.AddOptions(_storageAccount, _overwrite);
+        }
+
+        private static readonly Option<bool> _markComplete = new(
+            aliases: new[] { "-m", "--mark-complete" },
+            () => true,
+            description: @"Mark completed assets by writing metadata on the container");
+
+        private static readonly Option<bool> _skipMigrated = new(
+            aliases: new[] { "--skip-migrated" },
+            () => true,
+            description: @"Skip assets that have been migrated already.");
+
+        private static readonly Option<bool> _deleteMigrated = new(
+            aliases: new[] { "--delete-migrated" },
+            () => false,
+            description: @"Delete the asset after migration.");
+
+        public static Command AddMigrationOptions(this Command command)
+        {
+            return command.AddOptions(
+                _markComplete,
+                _skipMigrated,
+                _deleteMigrated);
         }
 
         private static readonly Option<Packager> _packagerType = new(
@@ -80,29 +116,15 @@ e.g: For Azure specify the storage account name or the URL <https://accountname.
             IsRequired = false
         };
 
-        private static readonly Option<bool> _markComplete = new(
-            aliases: new[] { "-m", "--mark-complete" },
-            () => true,
-            description: @"Mark completed assets by writing metadata on the container");
-
-        private static readonly Option<bool> _skipMigrated = new(
-            aliases: new[] { "--skip-migrated" },
-            () => true,
-            description: @"Skip assets that have been migrated already.");
-
         private static readonly Option<bool> _copyNonStreamable = new(
             aliases: new[] { "--copy-nonstreamable" },
             () => true,
             description: @"Copy non-stremable assets (Assets without .ism file) as is.");
 
-        private static readonly Option<bool> _deleteMigrated = new(
-            aliases: new[] { "--delete-migrated" },
+        private static readonly Option<bool> _encryptContent = new(
+            aliases: new[] { "-e", "--encrypt-content" },
             () => false,
-            description: @"Delete the asset after migration.");
-
-        private static readonly Option<int> _batchSize = new(
-            aliases: new[] { "--batch-size", "-b" },
-            description: @"Batch size for parallel processing.");
+            description: @"Encrypt the content while packaging. The key and the key id will be saved to the vault specified.");
 
         const int DefaultSegmentDurationInSeconds = 6;
         private static readonly Option<int?> _segmentDuration = new(
@@ -110,15 +132,52 @@ e.g: For Azure specify the storage account name or the URL <https://accountname.
             () => DefaultSegmentDurationInSeconds,
             description: "The segment duration to use for streaming");
 
-        public static Command AddMigrationOptions(this Command command)
+        private static readonly Option<Uri?> _keyVaultUri = new(
+            aliases: new[] { "--key-vault-uri", "-k" },
+            description: @"The vault for saving encryption keys.
+    Specific to the cloud you are migrating to.
+    For Azure it is <https://valutname.azure.net>");
+
+        private static readonly Option<string> _keyUri = new(
+            aliases: new[] { "--key-uri", "-u" },
+            description: @"The URI for the key to put in the manifest.  This should be a template");
+
+        public static Command AddPackagingOptions(this Command command)
         {
-            command.AddOption(_markComplete);
-            command.AddOption(_skipMigrated);
-            command.AddOption(_packagerType);
-            command.AddOption(_workingDirectory);
-            command.AddOption(_copyNonStreamable);
-            command.AddOption(_batchSize);
-            command.AddOption(_segmentDuration);
+            command.AddValidator(result =>
+            {
+                var encrypt = result.GetValueForOption<bool>(_encryptContent);
+                if (encrypt && result.FindResultFor(_keyVaultUri) == null)
+                {
+                    result.ErrorMessage = "Encrption is enabled but a vault to store the keys has not been specified.";
+                }
+
+                if (encrypt && result.FindResultFor(_keyUri) == null)
+                {
+                    result.ErrorMessage = "Encrption is enabled but key URI is not specified.";
+                }
+
+                if (encrypt && result.GetValueForOption(_packagerType) != Packager.Shaka)
+                {
+                    result.ErrorMessage = "Content encryption is only supported with shaka packager";
+                }
+
+                var uri = result.GetValueForOption(_keyUri);
+                if (uri != null)
+                {
+                    var(_, mesg) = TemplateMapper.Validate(uri, TemplateType.KeyUri, needKey: true);
+                    result.ErrorMessage = mesg;
+                }
+            });
+
+            command.AddOptions(
+                _packagerType,
+                _workingDirectory,
+                _copyNonStreamable,
+                _segmentDuration,
+                _encryptContent,
+                _keyVaultUri,
+                _keyUri);
             return command;
         }
 
@@ -127,7 +186,7 @@ e.g: For Azure specify the storage account name or the URL <https://accountname.
 #if DEBUG
             getDefaultValue: () => LogLevel.Debug,
 #else
-            getDefaultValue: () => LogLevel.Warning,
+            getDefaultValue: () => LogLevel.Information,
 #endif
             description: "The log level for logging"
             );
@@ -192,14 +251,18 @@ Depending on the type of authentcation you may have to set some environment vari
             return command;
         }
 
-        public static Command AddBatchOption(this Command command)
+        private static readonly Option<int> _batchSize = new(
+            aliases: new[] { "--batch-size", "-b" },
+            description: @"Batch size for parallel processing.");
+
+        public static Command AddBatchOption(this Command command, int maxBatchSize = 10)
         {
-            _batchSize.AddValidator(result =>
+            command.AddValidator(result =>
             {
-                var value = result.GetValueOrDefault<int>();
-                if (value < 1 || value > 10)
+                var value = result.GetValueForOption(_batchSize);
+                if (value < 1 || value > maxBatchSize)
                 {
-                    result.ErrorMessage = "Invalid batch size. Only values [1..10] are supported";
+                    result.ErrorMessage = $"Invalid batch size. Only values [1..{maxBatchSize}] are supported";
                 }
             });
 

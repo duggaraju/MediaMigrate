@@ -9,11 +9,11 @@ namespace MediaMigrate.Local
         private readonly ILogger _logger;
         private readonly string _basePath;
 
-        public LocalFileUploader(StorageOptions options, string container, ILogger logger)
+        public LocalFileUploader(StorageOptions options, string container, string prefix, ILogger logger)
         {
             _options = options;
             _logger = logger;
-            _basePath = Path.Combine(_options.StoragePath, container);
+            _basePath = Path.Combine(_options.StoragePath, container, prefix);
             Directory.CreateDirectory(_basePath);
         }
 
@@ -65,9 +65,9 @@ namespace MediaMigrate.Local
             return new Uri(Path.Combine(_options.StoragePath, container, fileName));
         }
 
-        public Task<IFileUploader> GetUploaderAsync(string container, CancellationToken cancellationToken)
+        public Task<IFileUploader> GetUploaderAsync(string container, string prefix, CancellationToken cancellationToken)
         {
-            return Task.FromResult<IFileUploader>(new LocalFileUploader(_options, container, _logger));
+            return Task.FromResult<IFileUploader>(new LocalFileUploader(_options, container, prefix, _logger));
         }
     }
 }

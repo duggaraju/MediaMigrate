@@ -30,24 +30,22 @@ This migrates the assets to a different storage account in your subscription.";
 
         public AssetsCommand() : base("assets", CommandDescription)
         {
-            _pathTemplate.AddValidator(result =>
+            AddValidator(result =>
             {
-                var value = result.GetValueOrDefault<string>();
-                if (!string.IsNullOrEmpty(value))
+                var value = result.GetValueForOption(_pathTemplate)!;
+                var (ok, key) = TemplateMapper.Validate(value, TemplateType.Asset);
+                if (!ok)
                 {
-                    var (ok, key) = TemplateMapper.Validate(value, TemplateType.Assets);
-                    if (!ok)
-                    {
-                        result.ErrorMessage = $"Invalid template: {value}. Template key '{key}' is invalid.";
-                    }
+                    result.ErrorMessage = $"Invalid template: {value}. Template key '{key}' is invalid.";
                 }
             });
+
             this.AddQueryOptions()
                 .AddMigrationOptions()
-                .AddStorageOptions(_pathTemplate)
-                .AddOption(_assetNames);
-
-            this.AddCommand(new AssetResetCommand());
+                .AddPackagingOptions()
+                .AddStorageOptions()
+                .AddOptions(_pathTemplate, _assetNames)
+                .AddCommand(new AssetResetCommand());
         }
     }
 }

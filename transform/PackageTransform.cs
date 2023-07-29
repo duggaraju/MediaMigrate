@@ -1,6 +1,7 @@
 ﻿using MediaMigrate.Ams;
 using MediaMigrate.Contracts;
 using Microsoft.Extensions.Logging;
+using System.Collections.Immutable;
 
 namespace MediaMigrate.Transform
 {
@@ -12,9 +13,9 @@ namespace MediaMigrate.Transform
             StorageOptions options,
             ILogger<PackageTransform> logger,
             TemplateMapper templateMapper,
-            IUploader uploader,
+            ICloudProvider cloudProvider,
             PackagerFactory factory)
-            : base(options, templateMapper, uploader, logger)
+            : base(options, templateMapper, cloudProvider, logger)
         {
             _packagerFactory = factory;
         }
@@ -50,7 +51,7 @@ namespace MediaMigrate.Transform
             var (assetName, container, _, manifest, _) = details;
             if (manifest == null) throw new ArgumentNullException(nameof(details));
 
-            var fileUploader = await _uploader.GetUploaderAsync(outputPath.Container, cancellationToken);
+            var fileUploader = await _uploader.GetUploaderAsync(outputPath.Container, outputPath.Prefix, cancellationToken);
             // temporary space for either pipes or files.
             var workingDirectory = Path.Combine(_options.WorkingDirectory, assetName);
             Directory.CreateDirectory(workingDirectory);
@@ -63,11 +64,28 @@ namespace MediaMigrate.Transform
                 var blobs = await container.GetListOfBlobsRemainingAsync(manifest, cancellationToken);
                 var upload = Task.WhenAll(blobs.Select(async blob =>
                 {
-                    await UploadBlobAsync(blob, decryptor, fileUploader, outputPath.Prefix, cancellationToken);
+                    await UploadBlobAsync(blob, decryptor, fileUploader, cancellationToken);
                 }));
 
-                var package = packager.RunAsync(details, workingDirectory, fileUploader, outputPath, cancellationToken);
+                if (_options.EncryptContent)
+                {
+                    details.KeyId = Guid.NewGuid().ToString("n");
+                    details.LicenseUrl = _templateMapper.ExpandKeyUriTemplate(_options.KeyUri!, details.KeyId);
+                    var key= new byte[16];
+                    new Random().NextBytes(key);
+                    details.EncryptionKey = Convert.ToHexString(key);
+                }
+
+                var package = packager.RunAsync(details, workingDirectory, fileUploader, cancellationToken);
                 await Task.WhenAll(upload, package);
+
+                if (details.KeyId != null && details.EncryptionKey != null)
+                {
+                    var secrets = _cloudProvider.GetSecretProvider(_options.KeyOptions);
+                    await secrets.UploadAsync(
+                        details.KeyId, details.EncryptionKey,
+                        ImmutableDictionary<string, string>.Empty, cancellationToken);
+                }
             }
             catch (Exception ex)
             {

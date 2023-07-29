@@ -8,10 +8,10 @@ namespace MediaMigrate.Transform
     {
         public UploadTransform(
             StorageOptions options,
-            IUploader uploader,
+            ICloudProvider cloudProvider,
             ILogger<UploadTransform> logger,
             TemplateMapper templateMapper) :
-            base(options, templateMapper, uploader, logger)
+            base(options, templateMapper, cloudProvider, logger)
         { 
         }
 
@@ -25,11 +25,11 @@ namespace MediaMigrate.Transform
             CancellationToken cancellationToken = default)
         {
             _logger.LogDebug("Uploading files from asset {asset} ", details.AssetName);
-            var fileUploader = await _uploader.GetUploaderAsync(outputPath.Container, cancellationToken);
+            var fileUploader = await _uploader.GetUploaderAsync(outputPath.Container, outputPath.Prefix, cancellationToken);
             var (assetName, inputContainer, _, manifest, _) = details;
             var inputBlobs = await inputContainer.GetListOfBlobsAsync(cancellationToken, manifest);
             using var decryptor = details.DecryptionInfo != null ? new Decryptor(details.DecryptionInfo) : null;
-            var uploads = inputBlobs.Select(blob => UploadBlobAsync(blob, decryptor, fileUploader, outputPath.Prefix, cancellationToken));
+            var uploads = inputBlobs.Select(blob => UploadBlobAsync(blob, decryptor, fileUploader, cancellationToken));
             await Task.WhenAll(uploads);
             return outputPath.Prefix;
         }

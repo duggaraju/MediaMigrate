@@ -8,7 +8,6 @@ namespace MediaMigrate.Contracts
             AssetDetails assetDetails,
             string workingDirectory,
             IFileUploader fileUploader,
-            (string Container, string Prefix) outputPath,
             CancellationToken cancellationToken);
     }
 

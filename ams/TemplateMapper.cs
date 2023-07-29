@@ -8,9 +8,10 @@ namespace MediaMigrate.Ams
 {
     enum TemplateType
     {
-        Assets,
-        Containers,
-        Keys
+        Asset,
+        Container,
+        Key,
+        KeyUri
     }
 
     internal class TemplateMapper
@@ -19,28 +20,26 @@ namespace MediaMigrate.Ams
 
         private static readonly IDictionary<TemplateType, string[]> Keys = new Dictionary<TemplateType, string[]>
         {
+            [TemplateType.Container] = new[]
             {
-                TemplateType.Containers, new []
-                {
-                    "ContainerName"
-                }
+                "ContainerName"
             },
+            [TemplateType.Asset] = new[]
             {
-                TemplateType.Assets, new []
-                {
-                    "AssetId",
-                    "AssetName",
-                    "AlternateId",
-                    "ContainerName",
-                    "LocatorId",
-                }
+                "AssetId",
+                "AssetName",
+                "AlternateId",
+                "ContainerName",
+                "LocatorId",
             },
+            [TemplateType.Key] = new[]
             {
-                TemplateType.Keys, new[]
-                {
-                    "AssetId",
-                    "AssetName"
-                }
+                "AssetId",
+                "AssetName"
+            },
+            [TemplateType.KeyUri] = new[]
+            {
+                "KeyId"
             }
         };
 
@@ -54,19 +53,24 @@ namespace MediaMigrate.Ams
             _logger = logger;
         }
 
-        public static (bool, string?) Validate(string template, TemplateType type = TemplateType.Assets)
+        public static (bool, string?) Validate(string template, TemplateType type = TemplateType.Asset, bool needKey = false)
         {
             if (string.IsNullOrWhiteSpace(template))
             {
                 return (false, "Invalid template string");
             }
 
-            if (template[0] == '/')
+            if ((type == TemplateType.Asset || type == TemplateType.Container) && template[0] == '/')
             {
-                return (false, "Template must start with container or bucket name which can't be empty.");
+                return (false, "Asset template must start with container or bucket name which can't be empty.");
             }
 
             var matches = _regEx.Matches(template);
+            if (needKey && matches.Count == 0)
+            {
+                return (false, "A template key value must be used in the template but none was used");
+            }
+
             foreach (Match match in matches)
             {
                 var group = match.Groups["key"];
@@ -137,36 +141,23 @@ namespace MediaMigrate.Ams
         public (string Container, string Prefix) ExpandAssetTemplate(MediaAssetResource asset, string template)
         {
             return ExpandPathTemplate(template, key =>
+            key switch
             {
-                switch (key)
-                {
-                    case "AssetId":
-                        return (asset.Data.AssetId ?? Guid.Empty).ToString();
-                    case "AssetName":
-                        return asset.Data.Name;
-                    case "ContainerName":
-                        return asset.Data.Container;
-                    case "AlternateId":
-                        return asset.Data.AlternateId;
-                    case "LocatorId":
-                        var locatorId = GetLocatorIdAsync(asset).Result;
-                        return locatorId;
-                }
-                return null;
+                "AssetId" => (asset.Data.AssetId ?? Guid.Empty).ToString(),
+                "AssetName" => asset.Data.Name,
+                "ContainerName" => asset.Data.Container,
+                "AlternateId" => asset.Data.AlternateId,
+                "LocatorId" => GetLocatorIdAsync(asset).Result,
+                _ => null
             });
         }
 
         public (string Container, string Prefix) ExpandPathTemplate(BlobContainerClient container, string template)
         {
-            return ExpandPathTemplate(template, key =>
+            return ExpandPathTemplate(template, key => key switch
             {
-                switch (key)
-                {
-                    case "ContainerName":
-                        return container.Name;
-
-                }
-                return null;
+                "ContainerName" => container.Name,
+                _ => null,
             });
         }
 
@@ -176,11 +167,11 @@ namespace MediaMigrate.Ams
             {
                 return contentKey.Id.ToString();
             }
-            return ExpandTemplate(template, key =>
+            return ExpandTemplate(template, key => key switch
             {
-                if (key == "KeyId") return contentKey.Id.ToString();
-                if (key == "PolicyName") return contentKey.PolicyName;
-                return null;
+                "KeyId" => contentKey.Id.ToString(),
+                "PolicyName" => contentKey.PolicyName,
+                _ => null
             });
         }
 
@@ -190,11 +181,20 @@ namespace MediaMigrate.Ams
             {
                 return asset.Data.Name;
             }
-            return ExpandTemplate(template, key =>
+            return ExpandTemplate(template, key => key switch
             {
-                if (key == "AssetId") return asset.Data.AssetId.ToString();
-                if (key == "AssetName") return asset.Data.Name;
-                return null;
+                "AssetId" => asset.Data.AssetId.ToString(),
+                "AssetName" => asset.Data.Name,
+                _ => null
+            });
+        }
+
+        public string ExpandKeyUriTemplate(string keyUri, string keyId)
+        {
+            return ExpandTemplate(keyUri, key => key switch
+            {
+                "KeyId" => keyId,
+                _ => null
             });
         }
 

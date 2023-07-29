@@ -4,6 +4,7 @@
     {
         public Task<IFileUploader> GetUploaderAsync(
             string container,
+            string prefix,
             CancellationToken cancellationToken);
 
         Uri GetDestinationUri(string container, string fileName);

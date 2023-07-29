@@ -10,11 +10,13 @@ namespace MediaMigrate.Gcp
         private readonly ILogger _logger;
         private readonly StorageClient _client;
         private readonly string _bucketName;
+        private readonly string _prefix;
 
-        public GCSFileUploader(StorageClient client, string bucketName, ILogger logger)
+        public GCSFileUploader(StorageClient client, string bucketName, string prefix, ILogger logger)
         {
             _client = client;
             _bucketName = bucketName;
+            _prefix = prefix;
             _logger = logger;
         }
 
@@ -28,7 +30,7 @@ namespace MediaMigrate.Gcp
             var upload = new Google.Apis.Storage.v1.Data.Object
             {
                 Bucket = _bucketName,
-                Name = fileName,
+                Name = _prefix + fileName,
                 ContentType = headers.ContentType,
                 ContentLanguage = headers.ContentLanguage
             };
@@ -53,9 +55,9 @@ namespace MediaMigrate.Gcp
             throw new NotImplementedException();
         }
 
-        public Task<IFileUploader> GetUploaderAsync(string container, CancellationToken cancellationToken)
+        public Task<IFileUploader> GetUploaderAsync(string container, string prefix, CancellationToken cancellationToken)
         {
-            return Task.FromResult<IFileUploader>(new GCSFileUploader(_client, container, _logger));
+            return Task.FromResult<IFileUploader>(new GCSFileUploader(_client, container, prefix, _logger));
         }
     }
 }

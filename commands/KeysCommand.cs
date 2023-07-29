@@ -16,38 +16,29 @@ For Azure it is <https://valutname.azure.net>")
             Arity = ArgumentArity.ExactlyOne
         };
 
-        private static readonly Option<string?> _secretTemplate = new(
+        private static readonly Option<string> _secretTemplate = new(
             aliases: new[] { "--secret-template", "-t" },
-            () => "${KeyId}",
+            () => "${AssetId}",
             description: @"Template for the name in the vault with which the key is stored.
 Can use ${KeyId} ${KeyName} in the template.")
         {
             Arity = ArgumentArity.ZeroOrOne
         };
 
-        private static readonly Option<int> _batchSize = new(
-            aliases: new[] { "--batch-size", "-b" },
-            () => 1,
-            description: @"Batch size for processing.");
-
         public KeysCommand() : base("keys", "Migrate asset encryption keys")
         {
-            _secretTemplate.AddValidator(result =>
+            AddValidator(result =>
             {
-                var value = result.GetValueOrDefault<string>();
-                if (!string.IsNullOrEmpty(value))
+                var value = result.GetValueForOption(_secretTemplate)!;
+                var (ok, key) = TemplateMapper.Validate(value, TemplateType.Key);
+                if (!ok)
                 {
-                    var (ok, key) = TemplateMapper.Validate(value, TemplateType.Keys);
-                    if (!ok)
-                    {
-                        result.ErrorMessage = $"Invalid template: {value}. Template key '{key}' is invalid.";
-                    }
+                    result.ErrorMessage = $"Invalid template: {value}. Template key '{key}' is invalid.";
                 }
             });
+            this.AddQueryOptions();
             AddOption(_keyVaultUri);
             AddOption(_secretTemplate);
-            AddOption(_batchSize);
-            this.AddQueryOptions();
         }
     }
 }

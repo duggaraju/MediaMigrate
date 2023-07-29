@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging;
 using Spectre.Console;
 using System.Diagnostics;
 using System.Threading.Channels;
+using System.Collections.Immutable;
 
 namespace MediaMigrate.Ams
 {
@@ -18,6 +19,7 @@ namespace MediaMigrate.Ams
         private readonly TransformFactory _transformFactory;
         private readonly AssetOptions _options;
         private readonly IMigrationTracker<BlobContainerClient, AssetMigrationResult> _tracker;
+        private readonly ICloudProvider _cloudProvider;
 
         public AssetMigrator(
             GlobalOptions globalOptions,
@@ -26,13 +28,15 @@ namespace MediaMigrate.Ams
             TokenCredential credential,
             IMigrationTracker<BlobContainerClient, AssetMigrationResult> tracker,
             ILogger<AssetMigrator> logger,
-            TransformFactory transformFactory) :
+            TransformFactory transformFactory,
+            ICloudProvider cloudProvider) :
             base(globalOptions, console, credential)
         {
             _options = assetOptions;
             _tracker = tracker;
             _logger = logger;
             _transformFactory = transformFactory;
+            _cloudProvider = cloudProvider;
         }
 
         public override async Task MigrateAsync(CancellationToken cancellationToken)
@@ -131,7 +135,7 @@ namespace MediaMigrate.Ams
                 var record = new AssetRecord(account, asset, info, details);
                 foreach (var transform in _transformFactory.GetAssetTransforms(_options))
                 {
-                    result = (AssetMigrationResult)await transform.RunAsync(record, cancellationToken);
+                    result = await transform.RunAsync(record, cancellationToken);
                     if (result.Status != MigrationStatus.Skipped)
                     {
                         break;
@@ -142,13 +146,14 @@ namespace MediaMigrate.Ams
                 {
                     _logger.LogWarning("Skipping asset {name} because it is not in a supported format!!!", asset.Data.Name);
                 }
+
                 if (_options.MarkCompleted)
                 {
                     await _tracker.UpdateMigrationStatus(container, result, cancellationToken);
                 }
+
                 if (_options.DeleteMigrated && result.Status == MigrationStatus.Success)
                 {
-
                     _logger.LogWarning("Deleting asset {name} after migration", asset.Data.Name);
                     await asset.DeleteAsync(WaitUntil.Completed, cancellationToken);
                 }

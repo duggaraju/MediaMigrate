@@ -52,9 +52,14 @@ namespace MediaMigrate
             return builder;
         }
 
-        private static bool LogFileFilter(LogLevel level) => true;
+        private static bool LogFileFilter(LogLevel level) => level >= LogLevel.Trace;
 
-        private static bool ConsoleFilter(in LogEventContext context) => context.EventId != Events.ShakaPackager;
+        private static bool ConsoleFilter(in LogEventContext context)
+        {
+            return context.EventId != Events.ShakaPackager &&
+                context.CategoryName != "Microsoft.Hosting.Lifetime" &&
+                context.CategoryName != "Microsoft.Extensions.Hosting.Internal.Host";
+        }
 
         public static IServiceCollection SetupLogging(this IServiceCollection services, GlobalOptions options)
         {
@@ -66,7 +71,6 @@ namespace MediaMigrate
                 };
 
                 builder
-                    .SetMinimumLevel(LogLevel.Debug)
                     .AddFilter(LogFileFilter)
                     .AddSpectreConsole(builder =>
                         builder

@@ -33,14 +33,14 @@ namespace MediaMigrate.Transform
                     options,
                     _loggerFactory.CreateLogger<PackageTransform>(),
                     _templateMapper,
-                    uploader,
+                    _cloudProvider,
                     _packagerFactory);
             }
             if (options.CopyNonStreamable || options.Packager == Packager.None)
             {
                 yield return new UploadTransform(
                     options,
-                    uploader,
+                    _cloudProvider,
                     _loggerFactory.CreateLogger<UploadTransform>(),
                     _templateMapper);
             }

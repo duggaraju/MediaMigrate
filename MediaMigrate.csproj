@@ -19,7 +19,7 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryUrl>https://github.com/duggaraju/MediaMigrate</RepositoryUrl>
     <PackageTags>Media;Migration;AMS;Azure;Media;Services;MediaMigrate;AWS;S3;Storage</PackageTags>
-    <Version>1.0.7</Version>
+    <Version>1.0.9</Version>
   </PropertyGroup>
 
   <ItemGroup>
@@ -27,8 +27,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="AWSSDK.MediaConvert" Version="3.7.201.1" />
-    <PackageReference Include="AWSSDK.S3" Version="3.7.201.2" />
+    <PackageReference Include="AWSSDK.MediaConvert" Version="3.7.201.4" />
+    <PackageReference Include="AWSSDK.S3" Version="3.7.201.5" />
     <PackageReference Include="Azure.Identity" Version="1.9.0" />
     <PackageReference Include="Azure.Monitor.Query" Version="1.2.0" />
     <PackageReference Include="Azure.ResourceManager.Media" Version="1.2.0" />
@@ -42,6 +42,7 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="7.0.0" />
     <PackageReference Include="Microsoft.Extensions.Logging.TraceSource" Version="7.0.0" />
     <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.18.1" />
+    <PackageReference Include="Microsoft.XmlSerializer.Generator" Version="7.0.0" />
     <PackageReference Include="Mono.Posix.NETStandard" Version="1.0.0" />
     <PackageReference Include="Mp4.Parser" Version="1.0.2" />
     <PackageReference Include="Spectre.Console" Version="0.47.0" />
@@ -52,7 +53,9 @@
     <PackageReference Include="System.Threading.Channels" Version="7.0.0" />
     <PackageReference Include="vertical-spectreconsolelogger" Version="0.10.1-dev.20230712.19" />
   </ItemGroup>
-
+  <ItemGroup>
+    <DotNetCliToolReference Include="Microsoft.XmlSerializer.Generator" Version="7.0.0" />
+  </ItemGroup>
   <ItemGroup>
     <None Update="LICENSE">
       <Pack>True</Pack>

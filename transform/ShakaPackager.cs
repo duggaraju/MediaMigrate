@@ -1,6 +1,7 @@
 ﻿using MediaMigrate.Contracts;
 using MediaMigrate.Log;
 using Microsoft.Extensions.Logging;
+using Spectre.Console;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
@@ -53,8 +54,11 @@ namespace MediaMigrate.Transform
             return RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? FileType.File : FileType.Pipe;
         }
 
-        private IEnumerable<string> GetArguments(Manifest manifest, IList<PackagerInput> inputs, IList<PackagerOutput> outputs, IList<PackagerOutput> manifests)
+        private IEnumerable<string> GetArguments(AssetDetails details, IList<PackagerInput> inputs, IList<PackagerOutput> outputs, IList<PackagerOutput> manifests)
         {
+            const string EncryptionLabel = "cenc";
+            var manifest = details.Manifest!;
+            var drm_label = _options.EncryptContent ? $",drm_label={EncryptionLabel}" : string.Empty;
             var i = 0;
             var arguments = inputs
                 .SelectMany(item =>
@@ -64,9 +68,23 @@ namespace MediaMigrate.Transform
                         var ext = track.IsMultiFile ? MEDIA_FILE : string.Empty;
                         var stream = track.Type.ToString().ToLowerInvariant();
                         var language = string.IsNullOrEmpty(track.SystemLanguage) || track.SystemLanguage == "und" ? string.Empty : $"language={track.SystemLanguage}";
-                        return $"stream={stream},in={item.FilePath},out={outputs[i].FilePath},playlist_name={manifests[i++].FilePath},{language}";
+                        var label = track is TextTrack ? string.Empty: drm_label;
+                        return $"stream={stream},in={item.FilePath},out={outputs[i].FilePath},playlist_name={manifests[i++].FilePath},{language}{label}";
                     });
                 }).ToList();
+
+            if (_options.EncryptContent)
+            {
+                arguments.Add("--enable_raw_key_encryption");
+                arguments.Add("--protection_scheme");
+                arguments.Add("cbcs");
+                arguments.Add("--keys");
+                arguments.Add($"label={EncryptionLabel}:key_id={details.KeyId}:key={details.EncryptionKey}");
+                arguments.Add("--hls_key_uri");
+                arguments.Add(details.LicenseUrl!);
+                arguments.Add("--clear_lead");
+                arguments.Add("0");
+            }
 
             var usePipe = GetInputFileType(manifest) == FileType.Pipe || GetOutputFileType(manifest) == FileType.Pipe;
             if (usePipe)
@@ -96,7 +114,7 @@ namespace MediaMigrate.Transform
             IList<PackagerOutput> manifests,
             CancellationToken cancellationToken)
         {
-            var arguments = GetArguments(assetDetails.Manifest!, inputs, outputs, manifests);
+            var arguments = GetArguments(assetDetails, inputs, outputs, manifests);
             var process = StartProcess(Packager, arguments,
                 exit =>
                 {

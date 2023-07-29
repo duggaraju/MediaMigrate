@@ -11,6 +11,14 @@ namespace MediaMigrate.Contracts
         const int DefaultSegmentDuration = 6;
         public int? SegmentDuration { get; set; } = DefaultSegmentDuration;
 
+        public bool EncryptContent { get; set; } = false;
+
+        public Uri? KeyVaultUri { get; set; }
+
+        public string? KeyUri { get; set; } = "/license?key_id=${KeyId}";
+
+        public KeyOptions KeyOptions => new (KeyVaultUri!);
+
         public string WorkingDirectory { get; set; } = Path.Combine(Path.GetTempPath(), GlobalOptions.PathSuffix, $"Run{GlobalOptions.RunId}");
     }
 
@@ -36,15 +44,14 @@ namespace MediaMigrate.Contracts
 
         public DateTime? CreatedBefore { get; set; }
 
-        public string? GetFilter()
+        private QueryOptions QueryOptions => new()
         {
-            return new QueryOptions
-            {
-                Entities = AssetNames,
-                CreatedAfter = CreatedAfter,
-                CreatedBefore = CreatedBefore,
-                Filter = Filter
-            }.GetFilter();
-        }
+            Entities = AssetNames,
+            CreatedAfter = CreatedAfter,
+            CreatedBefore = CreatedBefore,
+            Filter = Filter
+        };
+
+        public string? GetFilter() => QueryOptions.GetFilter();
     }
 }

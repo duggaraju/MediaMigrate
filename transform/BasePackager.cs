@@ -172,9 +172,8 @@ namespace MediaMigrate.Transform
             Action<string?> stdOut,
             Action<string?> stdError)
         {
-            _logger.LogDebug("Starting packager {command}...", command);
             var argumentString = string.Join(" ", arguments.Select(Escape));
-            _logger.LogTrace("Packager arguments: {args}", argumentString);
+            _logger.LogTrace("Starting packager {command} arguments: {args}", command, argumentString);
             var processStartInfo = new ProcessStartInfo(command, argumentString)
             {
                 CreateNoWindow = true,
@@ -269,8 +268,7 @@ namespace MediaMigrate.Transform
 
         public IPipeSink GetOutputSink(
             PackagerOutput output,
-            IFileUploader uploader,
-            string pathPrefix)
+            IFileUploader uploader)
         {
             var file = output.File;
             // Report update for every 1MB.
@@ -279,12 +277,18 @@ namespace MediaMigrate.Transform
             {
                 if (p >= update)
                 {
-                    _logger.LogTrace(Events.BlobUpload, "Uploaded {byte} bytes to {file}", p, file);
-                    update += 1024 * 1024;
+                    lock(this)
+                    {
+                        if (p >= update)
+                        {
+                            _logger.LogTrace(Events.BlobUpload, "Uploaded {byte} bytes to {file}", p, file);
+                            update += 1024 * 1024;
+                        }
+                    }
                 }
             });
             var headers = new ContentHeaders(output.ContentType, output.ContentLanguage);
-            return new UploadSink(uploader, pathPrefix + file, headers, progress, _logger);
+            return new UploadSink(uploader, file, headers, progress, _logger);
         }
 
         private async Task DownloadAsync(AssetDetails assetDetails, PackagerInput input, CancellationToken cancellationToken)
@@ -306,7 +310,6 @@ namespace MediaMigrate.Transform
             AssetDetails assetDetails,
             string workingDirectory,
             IFileUploader uploader,
-            (string Container, string Prefix) outputPath,
             CancellationToken cancellationToken)
         {
             // Create a linked CancellationTokenSource which when disposed cancells all tasks.
@@ -344,7 +347,7 @@ namespace MediaMigrate.Transform
             var uploads = new List<FileSource>();
             foreach (var output in outputs.Concat(manifests))
             {
-                var sink = GetOutputSink(output, uploader, outputPath.Prefix);
+                var sink = GetOutputSink(output, uploader);
                 var filePath = Path.Combine(outputDirectory, output.File);
                 if (output.Type == FileType.Pipe)
                 {

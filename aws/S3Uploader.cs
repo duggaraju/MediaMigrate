@@ -12,11 +12,13 @@ namespace MediaMigrate.Aws
         private readonly ILogger _logger;
         private readonly AmazonS3Client _client;
         private readonly string _bucketName;
+        private readonly string _prefix;
 
-        public S3FileUploader(AmazonS3Client client, string bucketName, ILogger logger)
+        public S3FileUploader(AmazonS3Client client, string bucketName, string prefix, ILogger logger)
         {
             _client = client;
             _bucketName = bucketName;
+            _prefix = prefix;
             _logger = logger;
         }
 
@@ -30,7 +32,7 @@ namespace MediaMigrate.Aws
             var request = new PutObjectRequest
             {
                 BucketName = _bucketName,
-                Key = fileName,
+                Key = _prefix + fileName,
                 InputStream = content,
                 AutoResetStreamPosition = false,
                 AutoCloseStream = false,
@@ -56,9 +58,9 @@ namespace MediaMigrate.Aws
             throw new NotImplementedException();
         }
 
-        public Task<IFileUploader> GetUploaderAsync(string container, CancellationToken cancellationToken)
+        public Task<IFileUploader> GetUploaderAsync(string container, string prefix, CancellationToken cancellationToken)
         {
-            return Task.FromResult<IFileUploader>(new S3FileUploader(_client, container, _logger));
+            return Task.FromResult<IFileUploader>(new S3FileUploader(_client, container, prefix, _logger));
         }
     }
 }

@@ -13,12 +13,14 @@ namespace MediaMigrate.Azure
         private readonly ILogger _logger;
         private readonly BlobContainerClient _container;
         private readonly StorageOptions _options;
+        private readonly string _prefix;
 
-        public AzureFileUploader(BlobContainerClient container, StorageOptions otions, ILogger logger)
+        public AzureFileUploader(BlobContainerClient container, string prefix, StorageOptions otions, ILogger logger)
         {
             _container = container;
             _options = otions;
             _logger = logger;
+            _prefix = prefix;
         }
 
         public async Task UploadAsync(
@@ -28,10 +30,11 @@ namespace MediaMigrate.Azure
             IProgress<long> progress,
             CancellationToken cancellationToken)
         {
+            var filePath = _prefix + fileName;
             _logger.LogTrace(
                 "Uploading to {fileName} in container {container} of account: {account}...",
-                fileName, _container.Name, _container.AccountName);
-            var blob = _container.GetBlockBlobClient(fileName);
+                filePath, _container.Name, _container.AccountName);
+            var blob = _container.GetBlockBlobClient(filePath);
             var options = new BlobUploadOptions
             {
                 HttpHeaders = new BlobHttpHeaders
@@ -47,7 +50,7 @@ namespace MediaMigrate.Azure
             };
             ;
             await blob.UploadAsync(content, options, cancellationToken: cancellationToken);
-            _logger.LogDebug("Finished uploading {name} to {file}", blob.Name, fileName);
+            _logger.LogDebug("Finished uploading {name} to {file}", filePath, fileName);
         }
 
         public async Task UploadBlobAsync(
@@ -87,7 +90,7 @@ namespace MediaMigrate.Azure
             return new Uri(_blobServiceClient.Uri, $"/{container}/{fileName}");
         }
 
-        public async Task<IFileUploader> GetUploaderAsync(string containerName, CancellationToken cancellationToken)
+        public async Task<IFileUploader> GetUploaderAsync(string containerName, string prefix, CancellationToken cancellationToken)
         {
             var container = _blobServiceClient.GetBlobContainerClient(containerName);
             if (!await container.ExistsAsync(cancellationToken))
@@ -95,7 +98,7 @@ namespace MediaMigrate.Azure
                 await container.CreateIfNotExistsAsync(cancellationToken: cancellationToken);
             }
 
-            return new AzureFileUploader(container, _options, _logger);
+            return new AzureFileUploader(container, prefix, _options, _logger);
         }
     }
 }

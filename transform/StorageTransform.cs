@@ -14,24 +14,33 @@ namespace MediaMigrate.Transform
         BlobContainerClient Container,
         StorageEncryptedAssetDecryptionInfo? DecryptionInfo,
         Manifest? Manifest,
-        ClientManifest? ClientManifest);
+        ClientManifest? ClientManifest)
+    {
+        public string? LicenseUrl { get; set; }
+
+        public string? KeyId { get; set; }
+
+        public string? EncryptionKey { get; set; }
+    }
 
     internal abstract class StorageTransform : ITransform<AssetDetails, AssetMigrationResult>
     {
         protected readonly StorageOptions _options;
-        private readonly TemplateMapper _templateMapper;
+        protected readonly TemplateMapper _templateMapper;
         protected readonly ILogger _logger;
         protected readonly IUploader _uploader;
+        protected readonly ICloudProvider _cloudProvider;
 
         public StorageTransform(
             StorageOptions options,
             TemplateMapper templateMapper,
-            IUploader uploader,
+            ICloudProvider cloudProvider,
             ILogger logger)
         {
             _options = options;
             _templateMapper = templateMapper;
-            _uploader = uploader;
+            _cloudProvider = cloudProvider;
+            _uploader = cloudProvider.GetStorageProvider(options);
             _logger = logger;
         }
 
@@ -75,10 +84,9 @@ namespace MediaMigrate.Transform
             BlockBlobClient blob,
             Decryptor? decryptor,
             IFileUploader fileUploader,
-            string prefix,
             CancellationToken cancellationToken)
         {
-            var blobName = $"{prefix}{blob.Name}";
+            var blobName = blob.Name;
             // hack optimization for direct blob copy.
             if (decryptor == null && fileUploader is AzureFileUploader uploader)
             {

@@ -6,7 +6,6 @@ namespace MediaMigrate.Commands
 {
     class StorageCommand : BaseCommand<StorageOptions, StorageMigrator>
     {
-
         private static readonly Option<string> _pathTemplate = new(
             aliases: new[] { "--path-template", "-t" },
             () => "${ContainerName}/",
@@ -23,12 +22,12 @@ Doesn't require the Azure media services to be running.";
 
         public StorageCommand() : base("storage", CommandDescription)
         {
-            _pathTemplate.AddValidator(result =>
+            AddValidator(result =>
             {
-                var value = result.GetValueOrDefault<string>();
+                var value = result.GetValueForOption(_pathTemplate);
                 if (!string.IsNullOrEmpty(value))
                 {
-                    var (ok, key) = TemplateMapper.Validate(value, TemplateType.Containers);
+                    var (ok, key) = TemplateMapper.Validate(value, TemplateType.Container);
                     if (!ok)
                     {
                         result.ErrorMessage = $"Invalid template: {value}. Template key '{key}' is invalid.";
@@ -36,10 +35,12 @@ Doesn't require the Azure media services to be running.";
                 }
             });
 
-            AddCommand(new StorageResetCommand());
             this.AddMigrationOptions()
-                .AddStorageOptions(_pathTemplate)
-                .AddStorageQueryOptions();
+                .AddPackagingOptions()
+                .AddStorageOptions()
+                .AddStorageQueryOptions()
+                .AddOptions(_pathTemplate)              
+                .AddCommand(new StorageResetCommand());
         }
     }
 }
