@@ -47,6 +47,7 @@ namespace MediaMigrate
                 var logger = host.Services.GetRequiredService<ILogger<Program>>();
                 logger.LogDebug("Writing logs to {file}", options.LogFile);
                 await next(context);
+                logger.LogDebug("All failures are logged to {file}", options.FailureLog);
                 logger.LogInformation("See file {file} for detailed logs.", options.LogFile);
             });
             return builder;

@@ -1,5 +1,4 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net6.0</TargetFramework>
@@ -19,7 +18,9 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryUrl>https://github.com/duggaraju/MediaMigrate</RepositoryUrl>
     <PackageTags>Media;Migration;AMS;Azure;Media;Services;MediaMigrate;AWS;S3;Storage</PackageTags>
-    <Version>1.0.9</Version>
+    <Version>1.1.0</Version>
+    <CheckForOverflowUnderflow>True</CheckForOverflowUnderflow>
+    <ShakaUrl>https://github.com/shaka-project/shaka-packager/releases/download/v2.6.1/</ShakaUrl>
   </PropertyGroup>
 
   <ItemGroup>
@@ -65,37 +66,17 @@
       <Pack>True</Pack>
       <PackagePath>\</PackagePath>
     </None>
-    <None Update="packager-linux-x64">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <PackagePath>tools\$(TargetFramework)\any\%(Filename)%(Extension)</PackagePath>
-	</None>
-    <None Update="packager-osx-x64">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <PackagePath>tools\$(TargetFramework)\any\%(Filename)%(Extension)</PackagePath>
-	</None>
-    <None Update="packager-win-x64.exe">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-	  <PackagePath>tools\$(TargetFramework)\any\%(Filename)%(Extension)</PackagePath>
-    </None>
     <None Update="README.md">
-      <Pack>True</Pack>
-      <PackagePath>\</PackagePath>
+	  <Pack>True</Pack>
+	  <PackagePath>\</PackagePath>
+    </None>
+    <ShakaPackager Include="packager-linux-x64;packager-osx-x64;packager-win-x64.exe" />
+    <None Update="@(ShakaPackager)">
+	  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <PackagePath>tools\$(TargetFramework)\any\%(Filename)%(Extension)</PackagePath>
     </None>
   </ItemGroup>
-  <PropertyGroup>
-    <ShakaWin>https://github.com/shaka-project/shaka-packager/releases/download/v2.6.1/packager-win-x64.exe</ShakaWin>
-    <ShakaLinux>https://github.com/shaka-project/shaka-packager/releases/download/v2.6.1/packager-linux-x64</ShakaLinux>
-    <ShakaOSX>https://github.com/shaka-project/shaka-packager/releases/download/v2.6.1/packager-osx-x64</ShakaOSX>
-  </PropertyGroup>
-  <Target Name="DownloadShakaPackager" BeforeTargets="Build" Condition="!Exists('packager-win-x64.exe')">
-	  <DownloadFile SourceUrl="$(ShakaWin)" DestinationFolder="$(MSBuildProjectDirectory)">
-      <Output TaskParameter="DownloadedFile" ItemName="Content" />
-    </DownloadFile>
-    <DownloadFile SourceUrl="$(ShakaLinux)" DestinationFolder="$(MSBuildProjectDirectory)">
-      <Output TaskParameter="DownloadedFile" ItemName="Content" />
-    </DownloadFile>
-    <DownloadFile SourceUrl="$(ShakaOSX)" DestinationFolder="$(MSBuildProjectDirectory)">
-	  <Output TaskParameter="DownloadedFile" ItemName="Content" />
-    </DownloadFile>
+  <Target Name="DownloadShakaPackager" BeforeTargets="Build" Outputs="@(ShakaPackager)">
+    <DownloadFile SourceUrl="$(ShakaUrl)%(ShakaPackager.Identity)" DestinationFolder="$(MSBuildProjectDirectory)" />
   </Target>
 </Project>

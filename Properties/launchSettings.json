@@ -2,7 +2,7 @@
   "profiles": {
     "MediaMigrate": {
       "commandName": "Project",
-      "commandLineArgs": "assets -s b2c12710-ecdf-4532-9ba6-7e74a219b5f2 -g provenance -n provenanceuswc -o amsencodermsitest -t \"$web/encrypted/${AssetName}\" -a truepic --skip-migrated false --encrypt-content -k https://mpprovenance.vault.azure.net/ --key-uri /license?key=${KeyId} "
+      "commandLineArgs": "assets -s b2c12710-ecdf-4532-9ba6-7e74a219b5f2 -g provenance -n provenanceuswc -o amsencodermsitest -t \"$web/encrypted/${AssetName}\" -a truepic --skip-migrated false --encrypt-content -k https://mpprovenance.vault.azure.net/ --key-uri /license?key=${KeyId} -y"
     },
     "Docker": {
       "commandName": "Docker",

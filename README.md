@@ -91,15 +91,18 @@ az container create --resource-group group --name mediamigrate --image ghcr.io/d
 # Credentials and Privileges
 The tools uses Azure Identity library for authentication.
 See [here](https://learn.microsoft.com/en-us/dotnet/api/overview/azure/identity-readme?view=azure-dotnet) for various ways to authenticate and the settings needed.
-The identity used to migrate must have 
+The identity used to migrate must have the following permissions:
 * 'Media Services Media Operator' role on the Azure Media Services account being migrated.
 * 'Contributor' role on the Azure Media Services account if you have storage encrypted assets and need acces to key to decrypt them.
-* 'Storage Blob Data Contributor' role on the Storage accounts used (source/destination)
+* ['Storage Blob Data Contributor'](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles#storage-blob-data-contributor) role on the Storage accounts used (source/destination)
+* ['Key Vault Secrets Officer'](https://learn.microsoft.com/en-us/azure/key-vault/general/rbac-guide?tabs=azure-cli#azure-built-in-roles-for-key-vault-data-plane-operations) role on the key vault used to store the keys. If the key vault is not using Azure RBAC then you will have to create an Access policy giving secrets management permission to the identity used.
 
-You can run the following az command line to give the privileges
+
+You can run the following az command line to give the privileges.  Update the subscription id, resource group and account names as necessary.
 ```bash
-az role assignment create --assignee sp_name_or_managed_identity --role "Media Services Media Operator" --scope /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/MyResourceGroup/providers/Microsoft.Media/mediaServices/mediaaccount
-az role assignment create --assignee sp_name_or_managed_identity --role "Storage Blob Data Contributor" --scope /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/MyResourceGroup/providers/Microsoft.Storage/storageAccounts/storageaccount
+az role assignment create --assignee sp_name_or_managed_identity --role "Media Services Media Operator" --scope /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/MyResourceGroup/providers/Microsoft.Media/mediaServices/mediaAccount
+az role assignment create --assignee sp_name_or_managed_identity --role "Storage Blob Data Contributor" --scope /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/MyResourceGroup/providers/Microsoft.Storage/storageAccounts/storageAccount
+az role assignment create --assignee sp_name_or_managed_identity --role "Key Vault Secrets Officer" --scope /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/MyResourceGroup/Microsoft.KeyVault/vaults/keyVaultAccount
 ```
 
 # Temporary storage needed.

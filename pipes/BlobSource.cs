@@ -41,7 +41,7 @@ namespace MediaMigrate.Pipes
 
         public async Task WriteAsync(Stream outputStream, CancellationToken cancellationToken)
         {
-            _logger.LogDebug("Begin downloading track: {name}", _blobClient.Name);
+            _logger.LogTrace("Begin downloading blob: {name}", _blobClient.Name);
             try
             {
                 BlobProperties properties = await _blobClient.GetPropertiesAsync(cancellationToken: cancellationToken);
@@ -60,7 +60,7 @@ namespace MediaMigrate.Pipes
                             {
                                 if (percentage >= update)
                                 {
-                                    _logger.LogDebug(
+                                    _logger.LogTrace(
                                         Events.BlobDownload,
                                         "Downloaded {percentage}% ({bytes}/{total}) of blob {blob}",
                                         percentage, progress, properties.ContentLength, _blobClient.Name);
@@ -72,7 +72,7 @@ namespace MediaMigrate.Pipes
                 };
                 using BlobDownloadStreamingResult result = await _blobClient.DownloadStreamingAsync(options, cancellationToken);
                 await result.Content.CopyToAsync(outputStream, cancellationToken);
-                _logger.LogDebug("Finished downloading track: {name}", _blobClient.Name);
+                _logger.LogDebug("Finished downloading blob: {name}", _blobClient.Name);
             }
             catch (Exception ex)
             {
