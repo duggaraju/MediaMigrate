@@ -18,9 +18,9 @@ using Spectre.Console;
 using System.CommandLine.Builder;
 using System.CommandLine.Invocation;
 using System.CommandLine.NamingConventionBinder;
-using System.Diagnostics;
 using Vertical.SpectreLogger;
 using Vertical.SpectreLogger.Core;
+using Serilog;
 
 namespace MediaMigrate
 {
@@ -63,21 +63,24 @@ namespace MediaMigrate
 
         public static IServiceCollection SetupLogging(this IServiceCollection services, GlobalOptions options)
         {
+            Serilog.Log.Logger = new LoggerConfiguration()
+                .Enrich.FromLogContext()
+                .MinimumLevel.Verbose()
+                .WriteTo.File(options.LogFile)
+                .WriteTo.Logger(lc => lc
+                    .Filter.ByIncludingOnly($"EventId.Id = {Events.Failure}")
+                    .WriteTo.File(options.FailureLog))
+                .CreateLogger();
             services.AddLogging(builder =>
             {
-                var logSwitch = new SourceSwitch("migration")
-                {
-                    Level = SourceLevels.All
-                };
-
                 builder
                     .AddFilter(LogFileFilter)
+                    .AddSerilog(dispose: true)
                     .AddSpectreConsole(builder =>
                         builder
                             .SetLogEventFilter(ConsoleFilter)
                             .SetMinimumLevel(options.LogLevel)
-                            .WriteInForeground())
-                    .AddTraceSource(logSwitch, new TextWriterTraceListener(options.LogFile));
+                            .WriteInForeground());
             });
             return services;
         }

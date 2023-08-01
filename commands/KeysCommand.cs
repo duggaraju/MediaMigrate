@@ -13,17 +13,13 @@ Specific to the cloud you are migrating to.
 For Azure it is <https://valutname.azure.net>")
         {
             IsRequired = true,
-            Arity = ArgumentArity.ExactlyOne
         };
 
         private static readonly Option<string> _secretTemplate = new(
             aliases: new[] { "--secret-template", "-t" },
             () => "${AssetId}",
             description: @"Template for the name in the vault with which the key is stored.
-Can use ${KeyId} ${KeyName} in the template.")
-        {
-            Arity = ArgumentArity.ZeroOrOne
-        };
+Can use ${KeyId} ${KeyName} in the template.");
 
         public KeysCommand() : base("keys", "Migrate asset encryption keys")
         {

@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Spectre.Console;
 using System.Diagnostics;
 using System.Threading.Channels;
+using MediaMigrate.Log;
 
 namespace MediaMigrate.Ams
 {
@@ -148,8 +149,8 @@ namespace MediaMigrate.Ams
             }
             catch (Exception ex)
             {
-                _logger.LogError("Failed to migrate container {name}", container.Name);
-                _logger.LogTrace(ex, "Container {name} migration failed!", container.Name);
+                _logger.LogError("Failed to migrate container {name}. {message}", container.Name, ex.Message);
+                _logger.LogTrace(Events.Failure, ex, "Container {name} migration failed!", container.Name);
                 result.Status = MigrationStatus.Failure;
             }
             return result;

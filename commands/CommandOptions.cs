@@ -65,7 +65,6 @@ This is specific to the cloud you are migrating to.
 e.g: For Azure specify the storage account name or the URL <https://accountname.blob.core.windows.net>")
         {
             IsRequired = true,
-            Arity = ArgumentArity.ExactlyOne
         };
 
         private static readonly Option<bool> _overwrite = new(
@@ -207,23 +206,20 @@ e.g: For Azure specify the storage account name or the URL <https://accountname.
             description: "The azure subscription to use")
         {
             IsRequired = true,
-            Arity = ArgumentArity.ExactlyOne
         };
 
         private static readonly Option<string> _resourceGroup = new(
             aliases: new[] { "--resource-group", "-g" },
             description: "The resource group of the account beging migrated")
         {
-            IsRequired = true,
-            Arity = ArgumentArity.ExactlyOne
+            IsRequired = true
         };
 
         private static readonly Option<string> _accoutName = new(
             aliases: new[] { "--account-name", "-n" },
             description: @"The target Azure Media Services or Azure Storage Account being migrated.")
         {
-            IsRequired = true,
-            Arity = ArgumentArity.ExactlyOne
+            IsRequired = true
         };
 
         private static readonly Option<CloudType> _cloudType = new(
@@ -233,10 +229,7 @@ e.g: For Azure specify the storage account name or the URL <https://accountname.
 For Azure refer to https://learn.microsoft.com/en-us/dotnet/api/azure.identity.defaultazurecredential?view=azure-dotnet
 For AWS refer to https://docs.aws.amazon.com/sdk-for-net/v3/developer-guide/creds-locate.html
 For GCP refer to https://cloud.google.com/docs/authentication/application-default-credentials
-Depending on the type of authentcation you may have to set some environment variables.")
-        {
-            Arity = ArgumentArity.ZeroOrOne
-        };
+Depending on the type of authentcation you may have to set some environment variables.");
 
         public static Command AddGlobalOptions(this Command command)
         {

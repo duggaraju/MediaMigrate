@@ -11,6 +11,6 @@ namespace MediaMigrate.Log
         public const int TransMuxer = 15;
         public const int AzureKeyVault = 16;
         public const int Pipes = 17;
-        public const int Failures = 18;
+        public const int Failure = 18;
     }
 }

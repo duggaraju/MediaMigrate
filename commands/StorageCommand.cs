@@ -11,10 +11,7 @@ namespace MediaMigrate.Commands
             () => "${ContainerName}/",
             description: @"Path template to determine the final path in the storage where files are uploaded.
 Can use ${ContainerName}.
-e.g., videos/${ContainerName} will upload to a container named 'videos' with path begining with the asset name.")
-        {
-            Arity = ArgumentArity.ZeroOrOne
-        };
+e.g., videos/${ContainerName} will upload to a container named 'videos' with path begining with the asset name.");
 
 
         const string CommandDescription = @"Directly migrate the assets from the storage account.

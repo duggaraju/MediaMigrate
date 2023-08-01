@@ -9,7 +9,7 @@ using Microsoft.Extensions.Logging;
 using Spectre.Console;
 using System.Diagnostics;
 using System.Threading.Channels;
-using System.Collections.Immutable;
+using MediaMigrate.Log;
 
 namespace MediaMigrate.Ams
 {
@@ -161,7 +161,8 @@ namespace MediaMigrate.Ams
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to migrate asset {name}.", asset.Data.Name);
+                _logger.LogError("Failed to migrate asset {name}. {message}", asset.Data.Name, ex.Message);
+                _logger.LogTrace(Events.Failure, ex, "Failed to migrate asset {name}.", asset.Data.Name);
                 return MigrationStatus.Failure;
             }
         }
