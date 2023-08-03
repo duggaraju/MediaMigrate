@@ -6,6 +6,7 @@ using Azure.ResourceManager.Storage;
 using Azure.ResourceManager.Media;
 using Azure.ResourceManager.Resources;
 using Azure.Storage.Blobs;
+using System.Reflection;
 
 namespace MediaMigrate.Ams
 {
@@ -22,7 +23,9 @@ namespace MediaMigrate.Ams
         {
             _globalOptions = options;
             _credentials = credential;
-            _armClient = new ArmClient(credential);
+            var clientOptions = new ArmClientOptions();
+            clientOptions.Diagnostics.ApplicationId = $"MediaMigrate/{GetType().Assembly.GetName().Version}";
+            _armClient = new ArmClient(credential, default, clientOptions);
             var resourceGroupId = ResourceGroupResource.CreateResourceIdentifier(
                 options.Subscription,
                 options.ResourceGroup);
