@@ -76,23 +76,18 @@ mediamigrate command -s subscriptionid -g resourcegroup -n amsaccount [options..
 ```
 
 ## Running the tool in the Cloud.
-The tool is packaged as a docker container and is available to run in the cloud.
+The tool is packaged as a docker container and is available to run in the cloud. 
 
 ```bash
 docker pull ghcr.io/duggaraju/mediamigrate:main
 ```
 ## Azure
-If you want to run the migration tool in the azure cloud you can use Azure Container Instances or Azure Functions
-The example below uses ACI with user assigned managed identity that has access to the storage/media account as needed.
-Please refer to [ACI](https://learn.microsoft.com/en-us/cli/azure/container?view=azure-cli-latest#az-container-create) for more details on container creation.
-```bash
-az container create --resource-group group --name mediamigrate --image ghcr.io/duggaraju/mediamigrate:main --assign-dentity /subscription/subcriptionid/resoruceGroups/group/providers/Microsoft.ManagedIdentity/userAssignedIdentities/myID --command-line "analyze -s subscription -g resourcegrup -n account" --restart-policy Never
-```
+See the [deployment](deployment/deployment.md) file for more details.
 # Credentials and Privileges
 The tools uses Azure Identity library for authentication.
 See [here](https://learn.microsoft.com/en-us/dotnet/api/overview/azure/identity-readme?view=azure-dotnet) for various ways to authenticate and the settings needed.
 The identity used to migrate must have the following permissions:
-* 'Media Services Media Operator' role on the Azure Media Services account being migrated.
+* ['Media Services Media Operator'](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles#media-services-media-operator) role on the Azure Media Services account being migrated.
 * 'Contributor' role on the Azure Media Services account if you have storage encrypted assets and need acces to key to decrypt them.
 * ['Storage Blob Data Contributor'](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles#storage-blob-data-contributor) role on the Storage accounts used (source/destination)
 * ['Key Vault Secrets Officer'](https://learn.microsoft.com/en-us/azure/key-vault/general/rbac-guide?tabs=azure-cli#azure-built-in-roles-for-key-vault-data-plane-operations) role on the key vault used to store the keys. If the key vault is not using Azure RBAC then you will have to create an Access policy giving secrets management permission to the identity used.
@@ -100,6 +95,7 @@ The identity used to migrate must have the following permissions:
 
 You can run the following az command line to give the privileges.  Update the subscription id, resource group and account names as necessary.
 ```bash
+az role assignment create --assignee sp_name_or_managed_identity --role "Reader" --scope /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/MyResourceGroup
 az role assignment create --assignee sp_name_or_managed_identity --role "Media Services Media Operator" --scope /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/MyResourceGroup/providers/Microsoft.Media/mediaServices/mediaAccount
 az role assignment create --assignee sp_name_or_managed_identity --role "Storage Blob Data Contributor" --scope /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/MyResourceGroup/providers/Microsoft.Storage/storageAccounts/storageAccount
 az role assignment create --assignee sp_name_or_managed_identity --role "Key Vault Secrets Officer" --scope /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/MyResourceGroup/Microsoft.KeyVault/vaults/keyVaultAccount
