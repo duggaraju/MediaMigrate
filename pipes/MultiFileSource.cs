@@ -26,46 +26,65 @@ namespace MediaMigrate.Pipes
             _trackPrefix = track.Source;
         }
 
+        private async Task<BinaryData?> DownloadChunkAsync(long chunk, CancellationToken cancellationToken)
+        {
+            var chunkName = $"{_trackPrefix}/{chunk}";
+            var blob = _container.GetBlockBlobClient(chunkName);
+            if (await blob.ExistsAsync(cancellationToken))
+            {
+                _logger.LogTrace("Downloading Chunk for stream: {name} time={time}", _trackPrefix, chunk);
+                var result = await blob.DownloadContentAsync(cancellationToken);
+                return result.Value.Content;
+            }
+            else
+            {
+                _logger.LogWarning("Missing Chunk at time {time} for stream {stream}. Ignoring gap by skipping to next.", chunk, _trackPrefix);
+                return null;
+            }
+        }
+
+        private async Task DownloadChunkToAsync(long chunk, Stream stream, CancellationToken cancellationToken)
+        {
+            var chunkName = $"{_trackPrefix}/{chunk}";
+            var blob = _container.GetBlockBlobClient(chunkName);
+            if (await blob.ExistsAsync(cancellationToken))
+            {
+                _logger.LogTrace("Downloading Chunk for stream: {name} time={time}", _trackPrefix, chunk);
+                await blob.DownloadToAsync(stream, cancellationToken);
+            }
+            else
+            {
+                _logger.LogWarning("Missing Chunk at time {time} for stream {stream}. Ignoring gap by skipping to next.", chunk, _trackPrefix);
+            }
+        }
+
         public async Task WriteAsync(Stream stream, CancellationToken cancellationToken)
         {
-            string? chunkName = null;
-            try
-            {
-                _logger.LogDebug("Begin downloading track: {name}", _trackPrefix);
-                chunkName = $"{_trackPrefix}/header";
-                var blob = _container.GetBlockBlobClient(chunkName);
-                await blob.DownloadToAsync(stream, cancellationToken);
+            _logger.LogDebug("Begin downloading track: {name}", _trackPrefix);
+            var header = $"{_trackPrefix}/header";
+            var blob = _container.GetBlockBlobClient(header);
+            await blob.DownloadToAsync(stream, cancellationToken);
 
-                // Report progress every 10%.
-                var i = 0;
-                var increment = _track.ChunkCount / 10;
-                foreach (var chunk in _track.GetChunks())
+            // Report progress every 10%.
+            var increment = _track.ChunkCount / 10;
+            var currentIncrement = 0;
+            var i = 0;
+            foreach (var chunks in _track.GetChunks().Chunk(5))
+            {
+                var data = await Task.WhenAll(chunks.Select(async c => await DownloadChunkAsync(c, cancellationToken)));
+                i += data.Length;
+                if (i >= currentIncrement)
                 {
-                    if (i % increment == 0)
-                    {
-                        _logger.LogDebug("Downloaded {i}/{total} blobs for track {stream}", i, _track.ChunkCount, _trackPrefix);
-                    }
-
-                    ++i;
-                    chunkName = $"{_trackPrefix}/{chunk}";
-                    blob = _container.GetBlockBlobClient(chunkName);
-                    if (await blob.ExistsAsync(cancellationToken))
-                    {
-                        _logger.LogTrace("Downloading Chunk for stream: {name} time={time}", _trackPrefix, chunk);
-                        await blob.DownloadToAsync(stream, cancellationToken);
-                    }
-                    else
-                    {
-                        _logger.LogWarning("Missing Chunk at time {time} for stream {stream}. Ignoring gap by skipping to next.", chunk, _trackPrefix);
-                    }
+                    _logger.LogDebug("Downloaded {i}/{total} blobs for track {stream}", i, _track.ChunkCount, _trackPrefix);
+                    currentIncrement += increment;
                 }
-                _logger.LogDebug("Finished downloading track {prefix}", _trackPrefix);
+
+                foreach (var d in data.Where(d => d != null))
+                {
+                    await stream.WriteAsync(d!.ToMemory(), cancellationToken);
+                }
             }
-            catch (Exception)
-            {
-                _logger.LogError("Failed to download chunk {chunkName} for live stream: {name}.", chunkName, _trackPrefix);
-                throw;
-            }
+            _logger.LogDebug("Finished downloading track {prefix}", _trackPrefix);
         }
 
         // Multi file streams are always smooth/cmaf.

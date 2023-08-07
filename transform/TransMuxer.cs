@@ -92,9 +92,12 @@ namespace MediaMigrate.Transform
 
         private static string GetCustomArguments(TransMuxOptions options)
         {
-            return options.Dash ?
-                "-movflags +dash+delay_moov+skip_trailer+skip_sidx+frag_keyframe  -frag_duration 2" :
-                options.FastStart ? "-movflags faststart" : string.Empty;
+            var arguments = string.Empty; //"-avoid_negative_ts make_zero";
+            if (options.Dash)
+                arguments += "-movflags +dash+delay_moov+skip_trailer+skip_sidx+frag_keyframe  -frag_duration 2";
+            else if (options.FastStart)
+                arguments += "-movflags faststart";
+            return arguments;
         }
 
         public async Task TransMuxAsync(IPipeSource source, string destination, TransMuxOptions options, CancellationToken cancellationToken)

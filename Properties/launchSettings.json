@@ -2,7 +2,7 @@
   "profiles": {
     "MediaMigrate": {
       "commandName": "Project",
-      "commandLineArgs": "assets -s a8ed91c2-6756-4422-88a5-955bb25e3141 -g Default-Media-WestUS -n weibzmsa -t $web/live1/${AssetName} -o amsencodermsitest -y -a \"rtmpencc -rtmpencc-1ha\" --skip-migrated false"
+      "commandLineArgs": "assets -s a8ed91c2-6756-4422-88a5-955bb25e3141 -g Default-Media-WestUS -n weibzmsa -t $web/live/${AssetName} -o amsencodermsitest -y -a \"rtmpencc -rtmpencc-1ha\" --skip-migrated false"
     },
     "Docker": {
       "commandName": "Docker",

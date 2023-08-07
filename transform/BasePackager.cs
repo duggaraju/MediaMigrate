@@ -70,7 +70,7 @@ namespace MediaMigrate.Transform
             {
                 var timeStamps = clientManifest.Streams
                     .Where(s => s.Type == StreamType.Video || s.Type == StreamType.Audio)
-                    .Select(stream => (stream.Type, stream.Chunks[0].Time / (float)stream.TimeScale))
+                    .Select(stream => (stream.Type, stream.FirstTimeStamp))
                     .ToArray();
                 _minTimeStamp = timeStamps.Min(s => s.Item2);
                 var max = timeStamps.Max(s => s.Item2);
@@ -234,12 +234,11 @@ namespace MediaMigrate.Transform
                 {
                     var track = tracks[0];
                     var (stream, _) = assetDetails.ClientManifest!.GetStream(track);
-                    var start = stream.GetStartTime();
                     var options = new TransMuxOptions
                     {
                         TrackId = track.TrackId,
                         Channel = track is VideoTrack ? Channel.Video :  track is AudioTrack ? Channel.Audio : Channel.Subtitle,
-                        Offset = start - _minTimeStamp
+                        Offset = stream.FirstTimeStamp - _minTimeStamp
                     };
 
                     if (track is TextTrack)

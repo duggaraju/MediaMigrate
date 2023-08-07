@@ -105,7 +105,7 @@ module keyVaultRoleAssignment 'roleassignment.bicep' = if (encrypt) {
   }
 }
 
-// Default argumetns to the migration tool.
+// Default arguments to the migration tool.
 var defaultArguments = [
   'dotnet'
   'MediaMigrate.dll'

@@ -58,7 +58,7 @@ namespace MediaMigrate.Azure
             BlockBlobClient blob,
             CancellationToken cancellationToken)
         {
-            var outputBlob = _container.GetBlockBlobClient(fileName);
+            var outputBlob = _container.GetBlockBlobClient(_prefix + fileName);
             var operation = await outputBlob.StartCopyFromUriAsync(blob.Uri, cancellationToken: cancellationToken);
             await operation.WaitForCompletionAsync(cancellationToken);
             _logger.LogDebug("Finished uploading {name} to {file}", blob.Name, fileName);

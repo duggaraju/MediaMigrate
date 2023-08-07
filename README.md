@@ -54,7 +54,7 @@ The below table summarizes the supported asset formats.
 ## Open Issues
 
 * Support to migrate AMS transforms to AWS Elemental Media Convert Job Specification.
-* Support to convert AMS transforms to GCS Trancsode API Job templates.
+* Support to convert AMS transforms to GCS Transcode API Job templates.
 * Support to migrate AMS Keys to AWS KMS or GCP Secret Manager.
 
 # How to Run
@@ -103,7 +103,7 @@ az role assignment create --assignee sp_name_or_managed_identity --role "Key Vau
 
 # Temporary storage needed.
 The tool uses temporary storage space for format conversion and uses pipes where possible to minimize storage usage.
-Smooth Streaming assets or assets from live events dont need to be downloaded locally.
+Smooth Streaming assets or assets from live events don't need to be downloaded locally.
 
 ## Linux
 * The only storage needed is for manifests when using shaka packager.
@@ -111,8 +111,8 @@ Smooth Streaming assets or assets from live events dont need to be downloaded lo
 
 ## Windows
 * Shaka packager writes the packaged files to local disk first before uploading due to a windows specific bug.
-* Using ffmpeg needs doulbe the local disk space when packaging MP4 files.
-* Smooth Streaming assets or assets from live events dont need to be downloaded locally.
+* Using ffmpeg needs double the local disk space when packaging MP4 files.
+* Smooth Streaming assets or assets from live events don't need to be downloaded locally.
 
 # Destination Cloud for migration.
 You can migrate your data to various cloud services like AWS or GCP or keep within Azure by moving to a storage account.
@@ -144,7 +144,7 @@ To migrate to a Google cloud storage bucket
    ```
     * Run the command by specifying the bucket name as part of the path template. e.g -t bucket_name/{AssetId}
 * If running a container in the cloud
-    * Ensure the bucket to use is alread created.
+    * Ensure the bucket to use is already created.
     * Create API keys and pass them as environment variables to the container
 
 # Migrate to a custom cloud/service.

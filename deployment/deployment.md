@@ -8,15 +8,15 @@ az group create --location location --name migration
 ```
 
 ## Update the parameters.
-The parameters for the deplyment are in the file [parameters.bicepparam](parameters.bicepparam).
+The parameters for the deployment are in the file [parameters.bicepparam](parameters.bicepparam).
 ```bicep
 // The media account being migrated.
-param mediaAccountName = 'accountname'
-param mediaAccountRG = 'resourcegroup'
+param mediaAccountName = 'account-name'
+param mediaAccountRG = 'resource-group'
 
-// Thes storage account details where the migrated data is written.
-param storageAccountName = 'storeagaccountname'
-param storageAccountRG = 'storageresourcegroup'
+// The storage account details where the migrated data is written.
+param storageAccountName = 'storage-account-name'
+param storageAccountRG = 'storage-resource-group'
 ```
 
 ## Deploy the resource.
