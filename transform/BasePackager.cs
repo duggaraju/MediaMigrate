@@ -208,7 +208,7 @@ namespace MediaMigrate.Transform
             }
             catch (Exception ex)
             {
-                _logger.LogError("Failed to start process {command} with error: {ex}", command, ex);
+                _logger.LogError(Events.ShakaPackager, "Failed to start process {command} with error: {ex}", command, ex);
                 throw;
             }
         }
@@ -216,7 +216,7 @@ namespace MediaMigrate.Transform
 
         public IPipeSource GetInputSource(AssetDetails assetDetails, PackagerInput input)
         {
-            var (file, _, transMux, tracks) = input;
+            var tracks = input.Tracks;
             IPipeSource source;
             if (tracks.Count == 1 && tracks[0].IsMultiFile)
             {
@@ -225,20 +225,26 @@ namespace MediaMigrate.Transform
             }
             else
             {
-                source = new BlobSource(assetDetails.Container, file, _logger);
+                source = new BlobSource(assetDetails.Container, input.File, _logger);
             }
 
-            if (transMux)
+            if (input.TransMux)
             {
                 if (tracks.Count == 1)
                 {
                     var track = tracks[0];
-                    var (stream, _) = assetDetails.ClientManifest!.GetStream(track);
+                    var offset = 0.0;
+                    if (assetDetails.Manifest!.IsLiveArchive)
+                    {
+                        var (stream, _) = assetDetails.ClientManifest!.GetStream(track);
+                        offset = stream.FirstTimeStamp - _minTimeStamp;
+                    }
+
                     var options = new TransMuxOptions
                     {
                         TrackId = track.TrackId,
                         Channel = track is VideoTrack ? Channel.Video :  track is AudioTrack ? Channel.Audio : Channel.Subtitle,
-                        Offset = stream.FirstTimeStamp - _minTimeStamp
+                        Offset = offset
                     };
 
                     if (track is TextTrack)
@@ -247,8 +253,9 @@ namespace MediaMigrate.Transform
                     }
                     else
                     {
-                        //source = new IsmvToCmafMuxer(_transMuxer, source, options, _logger);
-                        source = new FfmpegIsmvToMp4Muxer(_transMuxer, source, options);
+                        source = assetDetails.Manifest.IsLiveArchive ? 
+                            new FfmpegIsmvToMp4Muxer(_transMuxer, source, options) :
+                            new IsmvToCmafMuxer(_transMuxer, source, options, _logger);
                     }
                 }
                 else
@@ -390,7 +397,7 @@ namespace MediaMigrate.Transform
                 throw;
             }
 
-            _logger.LogTrace("Packaging {asset }finished successfully!", assetDetails.AssetName);
+            _logger.LogTrace("Packaging asset: {asset} finished successfully!", assetDetails.AssetName);
 
             // Upload any files pending to be uploaded.
             await Task.WhenAll(uploads.Select(upload => upload.RunAsync(cancellationToken)));

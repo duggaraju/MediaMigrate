@@ -49,11 +49,19 @@ namespace MediaMigrate.Transform
         private async Task RunFfmpeg(FFMpegArgumentProcessor processor, CancellationToken cancellationToken)
         {
             _logger.LogTrace(Events.Ffmpeg, "Running ffmpeg {args}", processor.Arguments);
-            await processor
-                .NotifyOnOutput(line => _logger.LogTrace(Events.Ffmpeg, "{line}", line))
-            .NotifyOnError(line => _logger.LogTrace(Events.Ffmpeg, "{line}", line))
-            .CancellableThrough(cancellationToken)
-            .ProcessAsynchronously(throwOnError: true);
+            try
+            {
+                await processor
+                    .NotifyOnOutput(line => _logger.LogTrace(Events.Ffmpeg, "{line}", line))
+                .NotifyOnError(line => _logger.LogTrace(Events.Ffmpeg, "{line}", line))
+                .CancellableThrough(cancellationToken)
+                .ProcessAsynchronously(throwOnError: true);
+            }
+            catch(Exception ex)
+            {
+                _logger.LogError(Events.Ffmpeg, ex, "Ffmpeg command failed!");
+                throw;
+            }
         }
 
         public async Task TransmuxUriAsync(Uri uri, MediaStream stream, string filePath, CancellationToken cancellationToken)
@@ -68,7 +76,7 @@ namespace MediaMigrate.Transform
             await RunFfmpeg(processor, cancellationToken);
         }
 
-        public async Task TransmuxUriAsync(Uri uri, string filePath, CancellationToken cancellationToken)
+        public async Task TransmuxStreamingUriAsync(Uri uri, string filePath, CancellationToken cancellationToken)
         {
             var result = await FFProbe.AnalyseAsync(uri, null, cancellationToken);
             var processor = FFMpegArguments.FromUrlInput(uri)
@@ -115,7 +123,11 @@ namespace MediaMigrate.Transform
         public async Task PipedTransMuxAsync(IPipeSource source, IPipeSink destination, TransMuxOptions options, CancellationToken cancellationToken)
         {
             var processor = FFMpegArguments
-                .FromPipeInput(source, args => args.WithCustomArgument($"-itsoffset {options.Offset}"))
+                .FromPipeInput(source, args =>
+                {
+                    if (options.Offset != 0.0)
+                        args.WithCustomArgument($"-itsoffset {options.Offset}");
+                })
                 .OutputToPipe(destination, args => AddMp4MuxingOptions(args, options));
             await RunFfmpeg(processor, cancellationToken);
         }
@@ -224,7 +236,7 @@ namespace MediaMigrate.Transform
                 var size = (int)box.Size;
                 if (!Enum.IsDefined(box.Type))
                 {
-                    _logger.LogError("Unknown box type {type}", box.Type);
+                    _logger.LogError(Events.TransMuxer, "Unknown box type {type}", box.Type);
                 }
                 if (box.Type == BoxType.MovieFragmentRandomAccessBox)
                 {

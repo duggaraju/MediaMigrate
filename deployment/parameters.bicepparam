@@ -1,11 +1,11 @@
 using './deployment.bicep'
 
 // The media serivces account being migrated.
-param mediaAccountName = 'provenanceuswc'
-param mediaAccountRG = 'provenance'
+param mediaAccountName = 'nimbuspm'
+param mediaAccountRG = 'johndeu_DO_NOT_DELETE'
 
 // If media account is in a different subscrtipion than where the migration is running.
-// param mediaAccountSubscription = '2b461b25-f7b4-4a22-90cc-d640a14b5471'
+param mediaAccountSubscription = '2b461b25-f7b4-4a22-90cc-d640a14b5471'
 
 // The storage account where migrated data is written.
 param storageAccountName = 'amsencodermsitest'
@@ -23,6 +23,7 @@ param keyvaultRG = 'provenance'
 
 //additional arguments.
 param arguments = [
+  '-d'
   '-t'
-  '$web/deployment/\${AssetName}'
+  '$web/johndeu/\${AssetName}'
 ]

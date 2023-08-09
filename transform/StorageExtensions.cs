@@ -86,12 +86,11 @@ namespace MediaMigrate.Transform
 
         public static async Task<ClientManifest> GetClientManifestAsync(this BlobContainerClient container, Manifest manifest, ILogger logger, CancellationToken cancellationToken)
         {
-            if (manifest.ClientManifest == null) throw new ArgumentException("No client manifest found", nameof(manifest));
+            if (manifest.ClientManifest == null) 
+                throw new ArgumentException("No client manifest found", nameof(manifest));
             var blob = container.GetBlockBlobClient(manifest.ClientManifest);
             logger.LogDebug("Getting client manifest {manifest} for asset", manifest.ClientManifest);
-            using BlobDownloadStreamingResult result =
-await blob.DownloadStreamingAsync(cancellationToken: cancellationToken);
-
+            using BlobDownloadStreamingResult result = await blob.DownloadStreamingAsync(cancellationToken: cancellationToken);
             return ClientManifest.Parse(result.Content, blob.Name, logger);
         }
 

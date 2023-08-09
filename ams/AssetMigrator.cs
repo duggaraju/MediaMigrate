@@ -98,20 +98,28 @@ namespace MediaMigrate.Ams
             CancellationToken cancellationToken)
         {
             _logger.LogInformation("Migrating asset: {name} ...", asset.Data.Name);
-            var container = await _resourceProvider.GetStorageContainerAsync(account, asset, cancellationToken);
-            if (_options.SkipMigrated)
-            {
-                var status = await _tracker.GetMigrationStatusAsync(container, cancellationToken);
-                if (status.Status == MigrationStatus.Success)
-                {
-                    _logger.LogDebug("Asset: {name} has already been migrated.", asset.Data.Name);
-                    return status;
-                }
-            }
 
             try
             {
                 var result = new AssetMigrationResult();
+                var container = await _resourceProvider.GetStorageContainerAsync(account, asset, cancellationToken);
+                if (!await container.ExistsAsync(cancellationToken: cancellationToken))
+                {
+                    _logger.LogWarning("Missing container for asset {asset}", asset.Data.Name);
+                    result.Status = MigrationStatus.Failure;
+                    return result;
+                }
+
+                if (_options.SkipMigrated)
+                {
+                    var status = await _tracker.GetMigrationStatusAsync(container, cancellationToken);
+                    if (status.Status == MigrationStatus.Success)
+                    {
+                        _logger.LogDebug("Asset: {name} has already been migrated.", asset.Data.Name);
+                        return status;
+                    }
+                }
+
                 StorageEncryptedAssetDecryptionInfo? info = null;
                 if (asset.Data.StorageEncryptionFormat != MediaAssetStorageEncryptionFormat.None)
                 {
