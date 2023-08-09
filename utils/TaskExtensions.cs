@@ -3,7 +3,12 @@ namespace MediaMigrate.Utils
 {
     static class TaskExtensions
     {
-        public static async Task WaitAllThrowOnFirstError(this IList<Task> tasks)
+        /// <summary>
+        /// Wait for all tasks to finish but fail quickly on the first failure.
+        /// </summary>
+        /// <param name="tasks"> A list of tasks to wait</param>
+        /// <returns>A task that completes when all tasks succeeds or any one task fails.</returns>
+        public static async Task FailFastWaitAll(this IList<Task> tasks)
         {
             while (tasks.Count > 0)
             {

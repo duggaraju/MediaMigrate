@@ -6,7 +6,6 @@ using Azure.ResourceManager.Storage;
 using Azure.ResourceManager.Media;
 using Azure.ResourceManager.Resources;
 using Azure.Storage.Blobs;
-using System.Reflection;
 
 namespace MediaMigrate.Ams
 {

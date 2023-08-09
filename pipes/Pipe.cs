@@ -143,7 +143,7 @@ namespace MediaMigrate.Pipes
 
             try
             {
-                await tasks.WaitAllThrowOnFirstError();
+                await tasks.FailFastWaitAll();
             }
             catch(Exception ex)
             {

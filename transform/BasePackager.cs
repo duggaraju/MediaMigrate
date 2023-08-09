@@ -381,7 +381,7 @@ namespace MediaMigrate.Transform
 
             try
             {
-                await allTasks.WaitAllThrowOnFirstError();
+                await allTasks.FailFastWaitAll();
             }
             catch (Exception ex)
             {
