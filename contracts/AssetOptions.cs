@@ -19,6 +19,8 @@ namespace MediaMigrate.Contracts
 
         public KeyOptions KeyOptions => new (KeyVaultUri!);
 
+        public bool UsePipes { get; set; } = true;
+
         public string WorkingDirectory { get; set; } = Path.Combine(Path.GetTempPath(), GlobalOptions.PathSuffix, $"Run{GlobalOptions.RunId}");
     }
 

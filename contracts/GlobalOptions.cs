@@ -12,7 +12,7 @@ namespace MediaMigrate.Contracts
 
 
         // The Run ID for the current run.
-        public static readonly string RunId = $"{DateTime.Now:yy_MM_d_HH_mm_ss}";
+        public static readonly string RunId = $"{DateTime.Now:yy_MM_dd_HH_mm_ss}";
         private string _logDirectory = Path.Combine(Path.GetTempPath(), PathSuffix);
 
         public string LogFile => Path.Combine(LogDirectory, $"MigrationLog_{RunId}.txt");

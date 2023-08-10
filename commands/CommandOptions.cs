@@ -141,6 +141,12 @@ e.g: For Azure specify the storage account name or the URL <https://accountname.
             aliases: new[] { "--key-uri", "-u" },
             description: @"The URI for the key to put in the manifest.  This should be a template");
 
+        private static readonly Option<bool> _usePipes = new(
+            aliases: new[] { "--use-pipes", "-p" },
+            () => true,
+            description: @"Use pipes for storage. Default is true but can be disabled if you hit errors.
+            For example MP4 content with 'moov' box at the end cannot be used with pipes");
+
         public static Command AddPackagingOptions(this Command command)
         {
             command.AddValidator(result =>
@@ -148,12 +154,12 @@ e.g: For Azure specify the storage account name or the URL <https://accountname.
                 var encrypt = result.GetValueForOption<bool>(_encryptContent);
                 if (encrypt && result.FindResultFor(_keyVaultUri) == null)
                 {
-                    result.ErrorMessage = "Encrption is enabled but a vault to store the keys has not been specified.";
+                    result.ErrorMessage = "Encryption is enabled but a vault to store the keys has not been specified.";
                 }
 
                 if (encrypt && result.FindResultFor(_keyUri) == null)
                 {
-                    result.ErrorMessage = "Encrption is enabled but key URI is not specified.";
+                    result.ErrorMessage = "Encryption is enabled but key URI is not specified.";
                 }
 
                 if (encrypt && result.GetValueForOption(_packagerType) != Packager.Shaka)
@@ -176,7 +182,8 @@ e.g: For Azure specify the storage account name or the URL <https://accountname.
                 _segmentDuration,
                 _encryptContent,
                 _keyVaultUri,
-                _keyUri);
+                _keyUri,
+                _usePipes);
             return command;
         }
 
@@ -215,7 +222,7 @@ e.g: For Azure specify the storage account name or the URL <https://accountname.
             IsRequired = true
         };
 
-        private static readonly Option<string> _accoutName = new(
+        private static readonly Option<string> _accountName = new(
             aliases: new[] { "--account-name", "-n" },
             description: @"The target Azure Media Services or Azure Storage Account being migrated.")
         {
@@ -237,7 +244,7 @@ Depending on the type of authentcation you may have to set some environment vari
             command.AddGlobalOption(_logDirectory);
             command.AddGlobalOption(_subscription);
             command.AddGlobalOption(_resourceGroup);
-            command.AddGlobalOption(_accoutName);
+            command.AddGlobalOption(_accountName);
             command.AddGlobalOption(_cloudType);
             command.AddGlobalOption(_daemonMode);
             command.AddBatchOption();

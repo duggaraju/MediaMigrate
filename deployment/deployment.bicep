@@ -23,10 +23,13 @@ param location string = resourceGroup().location
 param encrypt bool = true
 
 @description('The key vault to store the envcryption keys')
-param keyvaultname string
+param keyvaultName string
 
 @description('The resource group where key vault is present.')
 param keyvaultRG string
+
+@description('The subscription where the key vault is present.')
+param keyvaultSubscription = subscription().subscriptionId
 
 @description('Additional command line arguments to pass')
 param arguments array = []
@@ -71,7 +74,7 @@ module mediaRoleAssignment 'roleassignment.bicep' = {
 
 var storageAccountIds = map(mediaAccount.properties.storageAccounts, arg => arg.id)
 module storageRoleAssignments 'storageaccounts.bicep' = {
-  name: 'storageRoleAssignements'
+  name: 'storageRoleAssignments'
   params: {
     storageAccounts: storageAccountIds
     principalId: managedIdentity.properties.principalId
@@ -97,14 +100,14 @@ module storageRoleAssignment 'roleassignment.bicep' = {
 }
 
 resource keyVault 'Microsoft.KeyVault/vaults@2023-02-01' existing = if (encrypt) {
-  name: keyvaultname
-  scope: resourceGroup(keyvaultRG)
+  name: keyvaultName
+  scope: resourceGroup(keyvaultSubscription, keyvaultRG)
 }
 module keyVaultRoleAssignment 'roleassignment.bicep' = if (encrypt) {
-  scope: resourceGroup(keyvaultRG)
+  scope: resourceGroup(keyvaultSubscription, keyvaultRG)
   name: 'keyVaultRoleAssignment'
   params: {
-    resourceName: keyvaultname
+    resourceName: keyvaultName
     principalId: managedIdentity.properties.principalId
     roleName: keyVaultRoleName
     storage: true

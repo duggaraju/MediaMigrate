@@ -18,7 +18,7 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryUrl>https://github.com/duggaraju/MediaMigrate</RepositoryUrl>
     <PackageTags>Media;Migration;AMS;Azure;Media;Services;MediaMigrate;AWS;S3;Storage</PackageTags>
-    <Version>1.2.1</Version>
+    <Version>1.2.2</Version>
     <CheckForOverflowUnderflow>True</CheckForOverflowUnderflow>
     <ShakaUrl>https://github.com/shaka-project/shaka-packager/releases/download/v2.6.1/</ShakaUrl>
   </PropertyGroup>
@@ -28,8 +28,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="AWSSDK.MediaConvert" Version="3.7.201.7" />
-    <PackageReference Include="AWSSDK.S3" Version="3.7.201.8" />
+    <PackageReference Include="AWSSDK.MediaConvert" Version="3.7.201.11" />
+    <PackageReference Include="AWSSDK.S3" Version="3.7.201.12" />
     <PackageReference Include="Azure.Identity" Version="1.9.0" />
     <PackageReference Include="Azure.Monitor.Query" Version="1.2.0" />
     <PackageReference Include="Azure.ResourceManager.Media" Version="1.2.0" />
@@ -42,7 +42,7 @@
     <PackageReference Include="Microsoft.Extensions.Logging" Version="7.0.0" />
     <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="7.0.0" />
     <PackageReference Include="Microsoft.Extensions.Logging.TraceSource" Version="7.0.0" />
-    <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.18.1" />
+    <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.19.5" />
     <PackageReference Include="Microsoft.XmlSerializer.Generator" Version="7.0.0" />
     <PackageReference Include="Mono.Posix.NETStandard" Version="1.0.0" />
     <PackageReference Include="Mp4.Parser" Version="1.0.3" />

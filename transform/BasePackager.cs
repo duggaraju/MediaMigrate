@@ -53,10 +53,11 @@ namespace MediaMigrate.Transform
             _logger = logger;
         }
 
-        protected virtual FileType GetInputFileType(Manifest manifest) => FileType.File;
+        protected virtual FileType GetInputFileType(Manifest manifest) => _options.UsePipes ? FileType.Pipe : FileType.File;
 
-        protected virtual FileType GetOutputFileType(Manifest manifest) => FileType.Pipe;
+        protected virtual FileType GetOutputFileType(Manifest manifest) => _options.UsePipes ? FileType.Pipe : FileType.File;
 
+        // Manifests do not use pipe to avoid multiple writes to storage.
         protected virtual FileType GetManifestFileType(Manifest manifest) => FileType.File;
 
         protected virtual bool NeedsTransMux(Manifest manifest, ClientManifest? clientManifest)

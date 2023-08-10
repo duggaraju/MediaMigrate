@@ -62,15 +62,16 @@ namespace MediaMigrate
                 context.CategoryName != "Microsoft.Extensions.Hosting.Internal.Host";
         }
 
+        const string FileLogTemplate = "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] [{EventId}] {Message:lj}{NewLine}{Exception}";
         public static IServiceCollection SetupLogging(this IServiceCollection services, GlobalOptions options)
         {
             Serilog.Log.Logger = new LoggerConfiguration()
                 .Enrich.FromLogContext()
                 .MinimumLevel.Verbose()
-                .WriteTo.File(options.LogFile)
+                .WriteTo.File(options.LogFile, outputTemplate: FileLogTemplate)
                 .WriteTo.Logger(lc => lc
                     .Filter.ByIncludingOnly($"EventId.Id = {Events.Failure}")
-                    .WriteTo.File(options.FailureLog))
+                    .WriteTo.File(options.FailureLog, outputTemplate: FileLogTemplate))
                 .CreateLogger();
             services.AddLogging(builder =>
             {

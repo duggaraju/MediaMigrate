@@ -23,3 +23,9 @@ param storageAccountRG = 'storage-resource-group'
 ```bash
 az deployment group create --template-file deployment.bicep --resource-group migration --parameters parameters.bicepparam
 ```
+
+## Monitor progress
+While the ACI is running you can monitor the progress of the tool by running.
+```bash
+az container logs --follow -g migration -n media-migration
+```

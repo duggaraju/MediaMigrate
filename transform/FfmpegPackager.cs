@@ -19,7 +19,7 @@ namespace MediaMigrate.Transform
         protected override FileType GetInputFileType(Manifest manifest)
         {
             // MP4 cannot be read over a pipe.
-            return manifest.Format.StartsWith("mp4") || manifest.Format.Equals("fmp4") ? FileType.File : FileType.Pipe;
+            return manifest.Format.StartsWith("mp4") || manifest.Format.Equals("fmp4") ? FileType.File : base.GetInputFileType(manifest);
         }
 
         public override async Task<bool> PackageAsync(

@@ -29,10 +29,8 @@ namespace MediaMigrate.Transform
         }
 
         // Shaka packager cannot handle smooth input.
-        protected override FileType GetInputFileType(Manifest manifest)
-        {
-            return manifest.IsLiveArchive ? FileType.File: FileType.Pipe;
-        }
+        protected override FileType GetInputFileType(Manifest manifest) 
+            => manifest.IsLiveArchive ? FileType.File : base.GetInputFileType(manifest);
 
         protected override bool NeedsTransMux(Manifest manifest, ClientManifest? clientManifest)
         {
@@ -48,10 +46,10 @@ namespace MediaMigrate.Transform
             return base.NeedsTransMux(manifest, clientManifest);
         }
 
-        protected override FileType GetOutputFileType(Manifest _)
+        protected override FileType GetOutputFileType(Manifest manifest)
         {
             // known hang on linux and windows not supported.
-            return RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? FileType.File : FileType.Pipe;
+            return RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? FileType.File : base.GetOutputFileType(manifest);
         }
 
         private IEnumerable<string> GetArguments(AssetDetails details, IList<PackagerInput> inputs, IList<PackagerOutput> outputs, IList<PackagerOutput> manifests)
@@ -124,6 +122,11 @@ namespace MediaMigrate.Transform
                     }
                     else
                     {
+                        _logger.LogError("Shaka packager failed with error code {code}", exit);
+                        if (assetDetails.Manifest!.Format.StartsWith("mp4"))
+                        {
+                            _logger.LogWarning("Ensure that the MP4 files starts with moov box in the front");
+                        }
                         _taskCompletionSource.SetException(new Win32Exception(exit, $"{Packager} failed"));
                     }
                 },
