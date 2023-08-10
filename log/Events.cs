@@ -1,16 +1,18 @@
 ﻿
+using Microsoft.Extensions.Logging;
+
 namespace MediaMigrate.Log
 {
     public static class Events
     {
-        public const int MediaServices = 10;
-        public const int ShakaPackager = 11;
-        public const int Ffmpeg = 12;
-        public const int BlobDownload = 13;
-        public const int BlobUpload = 14;
-        public const int TransMuxer = 15;
-        public const int AzureKeyVault = 16;
-        public const int Pipes = 17;
-        public const int Failure = 18;
+        public static readonly EventId MediaServices = new(10, "MediaServices");
+        public static readonly EventId ShakaPackager = new (11, "ShakaPackager");
+        public static readonly EventId Ffmpeg = new (12, "Ffmpeg");
+        public static readonly EventId BlobDownload = new (13, "BlobDownload");
+        public static readonly EventId BlobUpload = new (14, "BlobUpload");
+        public static readonly EventId TransMuxer = new (15, "TransMuxer");
+        public static readonly EventId AzureKeyVault = new (16);
+        public static readonly EventId Pipes = new (17, "Pipes");
+        public static readonly EventId Failure = new (18);
     }
 }
