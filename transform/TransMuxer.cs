@@ -189,6 +189,11 @@ namespace MediaMigrate.Transform
                 var bytes = await input.ReadAsync(header, cancellationToken);
                 if (bytes == 0) break;
                 var box = BoxFactory.Parse(header.AsSpan());
+                if (!Enum.IsDefined(box.Type))
+                {
+                    _logger.LogError("Unknown box type {type}. Malfored TTML", box.Type);
+                    throw new InvalidDataException($"Malformed TTML. Unknown box type {box.Type}");
+                }
                 var size = (int)box.Size - 8;
                 if (box.Type == BoxType.MediaDataBox)
                 {
@@ -232,6 +237,12 @@ namespace MediaMigrate.Transform
                 var bytes = await ReadExactAsync(source, header.AsMemory(), cancellationToken);
                 if (bytes == 0) break;
                 var box = BoxFactory.Parse(header.AsSpan());
+                if (!Enum.IsDefined(box.Type))
+                {
+                    _logger.LogError("Unknown box type {type}. Malfored Smooth media", box.Type);
+                    throw new InvalidDataException($"Malformed Smooth asset. Unknown box type {box.Type}");
+                }
+
                 _logger.LogTrace(Events.TransMuxer, "Found Box {type} size {size}", box.Type.GetBoxName(), box.Size);
                 var size = (int)box.Size;
                 if (!Enum.IsDefined(box.Type))

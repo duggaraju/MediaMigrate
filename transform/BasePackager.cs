@@ -69,9 +69,14 @@ namespace MediaMigrate.Transform
             if (clientManifest != null)
             {
                 var timeStamps = clientManifest.Streams
-                    .Where(s => s.Type == StreamType.Video || s.Type == StreamType.Audio)
+                    .Where(s => (s.Type == StreamType.Video || s.Type == StreamType.Audio) && s.Chunks != null)
                     .Select(stream => (stream.Type, stream.FirstTimeStamp))
                     .ToArray();
+                if (timeStamps.Length == 0)
+                {
+                    _logger.LogWarning("No streams with chunks in file {name}", clientManifest.FileName);
+                    throw new InvalidDataException("Client manifest is not well formed");
+                }
                 _minTimeStamp = timeStamps.Min(s => s.Item2);
                 var max = timeStamps.Max(s => s.Item2);
                 _maxDelta = max - _minTimeStamp;
@@ -85,7 +90,7 @@ namespace MediaMigrate.Transform
             {
                 var extension = track.IsMultiFile ? (track is TextTrack ? VTT_FILE : MEDIA_FILE) : string.Empty;
                 var file = $"{track.Source}{extension}";
-                bool transMux = needsTransMux;
+                var transMux = needsTransMux;
                 if (track is TextTrack)
                 {
                     if (track.Parameters.Any(p => p.Name == "parentTrackName"))
@@ -118,7 +123,7 @@ namespace MediaMigrate.Transform
                     var input = new PackagerInput(file, fileType, transMux, new List<Track> { track })
                     {
                         FilePath = Path.Combine(
-                            workingDirectory, 
+                            workingDirectory,
                             manifest.Format == "fmp4" ? $"{Path.GetFileNameWithoutExtension(file)}_{track.TrackId}{Path.GetExtension(file)}" : file)
                     };
                     inputs.Add(input);
@@ -243,7 +248,7 @@ namespace MediaMigrate.Transform
                     var options = new TransMuxOptions
                     {
                         TrackId = track.TrackId,
-                        Channel = track is VideoTrack ? Channel.Video :  track is AudioTrack ? Channel.Audio : Channel.Subtitle,
+                        Channel = track is VideoTrack ? Channel.Video : track is AudioTrack ? Channel.Audio : Channel.Subtitle,
                         Offset = offset
                     };
 
@@ -253,7 +258,7 @@ namespace MediaMigrate.Transform
                     }
                     else
                     {
-                        source = assetDetails.Manifest.IsLiveArchive ? 
+                        source = assetDetails.Manifest.IsLiveArchive ?
                             new FfmpegIsmvToMp4Muxer(_transMuxer, source, options) :
                             new IsmvToCmafMuxer(_transMuxer, source, options, _logger);
                     }
@@ -283,7 +288,7 @@ namespace MediaMigrate.Transform
             {
                 if (p >= update)
                 {
-                    lock(this)
+                    lock (this)
                     {
                         if (p >= update)
                         {
