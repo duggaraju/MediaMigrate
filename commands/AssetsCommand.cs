@@ -41,6 +41,7 @@ This migrates the assets to a different storage account in your subscription.";
                 .AddMigrationOptions()
                 .AddPackagingOptions()
                 .AddStorageOptions()
+                .AddBatchOption()
                 .AddOptions(_pathTemplate, _assetNames)
                 .AddCommand(new AssetResetCommand());
         }

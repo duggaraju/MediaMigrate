@@ -143,7 +143,7 @@ namespace MediaMigrate.Pipes
 
             try
             {
-                await tasks.FailFastWaitAll();
+                await tasks.FailFastWaitAll(cancellationToken);
             }
             catch(Exception ex)
             {

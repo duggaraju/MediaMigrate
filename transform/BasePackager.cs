@@ -154,7 +154,7 @@ namespace MediaMigrate.Transform
 
         protected abstract List<PackagerOutput> GetManifests(Manifest manifest, IList<PackagerOutput> outputs);
 
-        public abstract Task PackageAsync(
+        protected abstract Task PackageAsync(
             AssetDetails assetDetails,
             string workingDirectory,
             IList<PackagerInput> inputFiles,
@@ -326,7 +326,8 @@ namespace MediaMigrate.Transform
         {
             // Create a linked CancellationTokenSource which when disposed cancells all tasks.
             using var source = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            // TODO: have absolute timeout. source.CancelAfter(TimeSpan.FromHours(1)); 
+            // TODO: have absolute timeout.
+            source.CancelAfter(TimeSpan.FromHours(1)); 
             cancellationToken = source.Token;
 
             var (assetName, _, decryptionInfo, manifest, clientManifest) = assetDetails;
@@ -394,7 +395,7 @@ namespace MediaMigrate.Transform
 
             try
             {
-                await allTasks.FailFastWaitAll();
+                await allTasks.FailFastWaitAll(cancellationToken);
             }
             catch (Exception ex)
             {

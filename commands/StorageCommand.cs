@@ -36,7 +36,8 @@ Doesn't require the Azure media services to be running.";
                 .AddPackagingOptions()
                 .AddStorageOptions()
                 .AddStorageQueryOptions()
-                .AddOptions(_pathTemplate)              
+                .AddOptions(_pathTemplate)
+                .AddBatchOption()
                 .AddCommand(new StorageResetCommand());
         }
     }

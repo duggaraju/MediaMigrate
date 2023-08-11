@@ -104,7 +104,7 @@ namespace MediaMigrate.Transform
             return arguments;
         }
 
-        public override Task<bool> PackageAsync(
+        protected override Task<bool> PackageAsync(
             AssetDetails assetDetails,
             string workingDirectory,
             IList<PackagerInput> inputs,

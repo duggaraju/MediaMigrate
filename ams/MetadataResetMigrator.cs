@@ -2,6 +2,7 @@
 using Azure.ResourceManager.Media;
 using Azure.Storage.Blobs;
 using MediaMigrate.Contracts;
+using MediaMigrate.Log;
 using Microsoft.Extensions.Logging;
 using Spectre.Console;
 using System.Diagnostics;
@@ -64,8 +65,16 @@ namespace MediaMigrate.Ams
             CancellationToken cancellationToken)
         {
             _logger.LogDebug("Reset metadata for asset {name}", asset.Data.Name);
-            var container = await _resourceProvider.GetStorageContainerAsync(account, asset, cancellationToken);
-            await _tracker.ResetMigrationStatus(container, cancellationToken);
+            try
+            {
+                var container = await _resourceProvider.GetStorageContainerAsync(account, asset, cancellationToken);
+                await _tracker.ResetMigrationStatus(container, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("Failed to reset the state of asset {name}", asset.Data.Name);
+                _logger.LogTrace(Events.Failure, ex, "Resetting the state failed {name}", asset.Data.Name);
+            }
         }
     }
 

@@ -2,6 +2,7 @@
 using Azure.Core;
 using Azure.Security.KeyVault.Secrets;
 using Microsoft.Extensions.Logging;
+using MediaMigrate.Log;
 
 namespace MediaMigrate.Azure
 {
@@ -27,7 +28,7 @@ namespace MediaMigrate.Azure
             IDictionary<string, string> metadata,
             CancellationToken cancellationToken)
         {
-            _logger.LogInformation("Saving secret {name} to key valut {vault}", secretName, _keyOptions.KeyVaultUrl);
+            _logger.LogInformation(Events.AzureKeyVault, "Saving secret {name} to key valut {vault}", secretName, _keyOptions.KeyVaultUrl);
             var secret = new KeyVaultSecret(secretName, secretValue);
             foreach (var (name, value) in metadata)
             {

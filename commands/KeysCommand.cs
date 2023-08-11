@@ -32,7 +32,8 @@ Can use ${KeyId} ${KeyName} in the template.");
                     result.ErrorMessage = $"Invalid template: {value}. Template key '{key}' is invalid.";
                 }
             });
-            this.AddQueryOptions();
+            this.AddQueryOptions()
+                .AddBatchOption();
             AddOption(_keyVaultUri);
             AddOption(_secretTemplate);
         }

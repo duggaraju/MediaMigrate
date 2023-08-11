@@ -7,7 +7,8 @@ namespace MediaMigrate.Commands
     {
         public AssetResetCommand() : base("reset", "Reset asset migration metadata")
         {
-            this.AddQueryOptions();
+            this.AddQueryOptions()
+                .AddBatchOption(defaultBatchSize: 10, maxBatchSize: 100);
         }
     }
 
@@ -15,7 +16,8 @@ namespace MediaMigrate.Commands
     {
         public StorageResetCommand() : base("reset", "Reset asset migration metadata")
         {
-            this.AddStorageQueryOptions();
+            this.AddStorageQueryOptions()
+                .AddBatchOption(defaultBatchSize: 10, maxBatchSize: 100);
         }
     }
 }

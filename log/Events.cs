@@ -11,8 +11,8 @@ namespace MediaMigrate.Log
         public static readonly EventId BlobDownload = new (13, "BlobDownload");
         public static readonly EventId BlobUpload = new (14, "BlobUpload");
         public static readonly EventId TransMuxer = new (15, "TransMuxer");
-        public static readonly EventId AzureKeyVault = new (16);
+        public static readonly EventId AzureKeyVault = new (16, "AzureKeyVault");
         public static readonly EventId Pipes = new (17, "Pipes");
-        public static readonly EventId Failure = new (18);
+        public static readonly EventId Failure = new (18, "Failure");
     }
 }

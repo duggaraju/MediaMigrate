@@ -25,7 +25,8 @@ Report - A migration report")
         public AnalysisCommand() :
             base("analyze", CommandDescription)
         {
-            this.AddOption(_analysisType);
+            this.AddBatchOption(defaultBatchSize: 10, maxBatchSize: 20)
+                .AddOption(_analysisType);
         }
     }
 }

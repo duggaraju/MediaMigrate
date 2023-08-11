@@ -247,26 +247,26 @@ Depending on the type of authentcation you may have to set some environment vari
             command.AddGlobalOption(_accountName);
             command.AddGlobalOption(_cloudType);
             command.AddGlobalOption(_daemonMode);
-            command.AddBatchOption();
             return command;
         }
 
-        private static readonly Option<int> _batchSize = new(
-            aliases: new[] { "--batch-size", "-b" },
-            description: @"Batch size for parallel processing.");
-
-        public static Command AddBatchOption(this Command command, int maxBatchSize = 10)
+        public static Command AddBatchOption(this Command command, int defaultBatchSize = 5, int maxBatchSize = 10)
         {
+            Option<int> batchSize = new(
+                aliases: new[] { "--batch-size", "-b" },
+                () => defaultBatchSize,
+                description: @"Batch size for parallel processing.");
+
             command.AddValidator(result =>
             {
-                var value = result.GetValueForOption(_batchSize);
+                var value = result.GetValueForOption(batchSize);
                 if (value < 1 || value > maxBatchSize)
                 {
-                    result.ErrorMessage = $"Invalid batch size. Only values [1..{maxBatchSize}] are supported";
+                    result.ErrorMessage = $"Invalid batch size. Only values 0 or [1..{maxBatchSize}] are supported";
                 }
             });
 
-            command.AddOption(_batchSize);
+            command.AddOption(batchSize);
             return command;
         }
     }

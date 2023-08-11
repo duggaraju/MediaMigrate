@@ -22,13 +22,13 @@ namespace MediaMigrate.Transform
             return manifest.Format.StartsWith("mp4") || manifest.Format.Equals("fmp4") ? FileType.File : base.GetInputFileType(manifest);
         }
 
-        public override async Task<bool> PackageAsync(
+        protected override async Task<bool> PackageAsync(
             AssetDetails assetDetails,
             string workingDirectory,
             IList<PackagerInput> inputFiles,
             IList<PackagerOutput> outputFiles,
             IList<PackagerOutput> manifests,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken)
         {
             var manifest = assetDetails.Manifest!;
             try
