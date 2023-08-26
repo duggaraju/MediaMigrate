@@ -49,7 +49,7 @@ The below table summarizes the supported asset formats.
 | Low-latency Live archive | No | Yes |
 | Encrypted Live archive | No | No |
 | Live archive with captions | No | Yes |
-| Live archive with discontinuities | No | No (discontinuities not handled)|
+| Live archive with discontinuities | No | Yes* (video discontinuities not handled)|
 
 ## Open Issues
 

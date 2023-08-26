@@ -147,6 +147,10 @@ e.g: For Azure specify the storage account name or the URL <https://accountname.
             description: @"Use pipes for storage. Default is true but can be disabled if you hit errors.
             For example MP4 content with 'moov' box at the end cannot be used with pipes");
 
+        private static readonly Option<string> _manifestName = new(
+            aliases: new[] { "--manifest-name" },
+            description: @"The manifest name to use for the package content. By default the input .ism file name is used as manifest name which can be overridden by this option.");
+
         public static Command AddPackagingOptions(this Command command)
         {
             command.AddValidator(result =>
@@ -183,7 +187,8 @@ e.g: For Azure specify the storage account name or the URL <https://accountname.
                 _encryptContent,
                 _keyVaultUri,
                 _keyUri,
-                _usePipes);
+                _usePipes,
+                _manifestName);
             return command;
         }
 

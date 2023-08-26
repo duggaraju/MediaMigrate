@@ -29,14 +29,11 @@ namespace MediaMigrate.Pipes
         {
         }
 
+        public static string GetFormat(string extension) => ExtensionToFormatMap.TryGetValue(extension, out var format) ? format : "mp4";
+
         public string GetStreamArguments()
         {
-            var extension = Path.GetExtension(_blobClient.Name);
-            if (!ExtensionToFormatMap.TryGetValue(extension, out var format))
-            {
-                format = "mp4"; // fallback to mp4.
-            }
-            return $"-f {format}";
+            return $"-f {GetFormat(Path.GetExtension(_blobClient.Name))}";
         }
 
         public async Task WriteAsync(Stream outputStream, CancellationToken cancellationToken)

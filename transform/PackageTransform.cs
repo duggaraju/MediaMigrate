@@ -34,12 +34,6 @@ namespace MediaMigrate.Transform
                 return false;
             }
 
-            if (details.ClientManifest != null && details.ClientManifest.HasDiscontinuities())
-            {
-                _logger.LogWarning("Packaging asset {asset}, which is a live archive with discontinuities is not supported!", details.AssetName);
-                return false;
-            }
-
             return true;
         }
 

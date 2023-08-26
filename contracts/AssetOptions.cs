@@ -21,6 +21,8 @@ namespace MediaMigrate.Contracts
 
         public bool UsePipes { get; set; } = true;
 
+        public string? ManifestName { get; set; }
+
         public string WorkingDirectory { get; set; } = Path.Combine(Path.GetTempPath(), GlobalOptions.PathSuffix, $"Run{GlobalOptions.RunId}");
     }
 

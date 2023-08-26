@@ -26,6 +26,27 @@ namespace MediaMigrate.Transform
         public string FilePath { get; set; } = File;
     }
 
+    public record DiscontinuityInfo
+    {
+        public IList<(StreamType Type, double Time)> TimeStamps { get; init; }
+
+        public double MinVideoTimestamp { get; set; }
+
+        public double MinAudioTimeStamp { get; set; }
+
+        public double Delta => TimeStamps.Max().Time - Math.Min(MinVideoTimestamp, MinVideoTimestamp);
+
+        public DiscontinuityInfo(ClientManifest clientManifest)
+        {
+            TimeStamps = clientManifest.Streams
+                .Where(s => (s.Type == StreamType.Video || s.Type == StreamType.Audio) && s.Chunks != null)
+                .Select(stream => (stream.Type, stream.FirstTimeStamp))
+                .ToArray();
+            MinVideoTimestamp = TimeStamps.Where(s => s.Type == StreamType.Video).Min(s => s.Item2);
+            MinAudioTimeStamp = TimeStamps.Where(s => s.Type == StreamType.Audio).Min(s => s.Item2);
+        }
+    }
+
     abstract class BasePackager : IPackager
     {
         public const string MEDIA_FILE = ".mp4";
@@ -43,8 +64,7 @@ namespace MediaMigrate.Transform
         protected readonly TransMuxer _transMuxer;
         protected readonly ILogger _logger;
         protected readonly StorageOptions _options;
-        protected double _minTimeStamp;
-        protected double _maxDelta;
+        protected DiscontinuityInfo? _discontinuityInfo;
 
         public BasePackager(StorageOptions options, TransMuxer transMuxer, ILogger logger)
         {
@@ -69,18 +89,7 @@ namespace MediaMigrate.Transform
         {
             if (clientManifest != null)
             {
-                var timeStamps = clientManifest.Streams
-                    .Where(s => (s.Type == StreamType.Video || s.Type == StreamType.Audio) && s.Chunks != null)
-                    .Select(stream => (stream.Type, stream.FirstTimeStamp))
-                    .ToArray();
-                if (timeStamps.Length == 0)
-                {
-                    _logger.LogWarning("No streams with chunks in file {name}", clientManifest.FileName);
-                    throw new InvalidDataException("Client manifest is not well formed");
-                }
-                _minTimeStamp = timeStamps.Min(s => s.Item2);
-                var max = timeStamps.Max(s => s.Item2);
-                _maxDelta = max - _minTimeStamp;
+                _discontinuityInfo = new DiscontinuityInfo(clientManifest);
             }
 
             var fileType = GetInputFileType(manifest);
@@ -139,7 +148,7 @@ namespace MediaMigrate.Transform
 
         protected List<PackagerOutput> GetOutputs(Manifest manifest, IList<PackagerInput> inputs)
         {
-            var baseName = Path.GetFileNameWithoutExtension(manifest.FileName);
+            var baseName =  _options.ManifestName ?? Path.GetFileNameWithoutExtension(manifest.FileName);
             var fileType = GetOutputFileType(manifest);
             return inputs.SelectMany(i => i.Tracks)
                         .Select((t, i) =>
@@ -240,17 +249,21 @@ namespace MediaMigrate.Transform
                 {
                     var track = tracks[0];
                     var offset = 0.0;
+                    var hasDiscontinuity = false;
                     if (assetDetails.Manifest!.IsLiveArchive)
                     {
                         var (stream, _) = assetDetails.ClientManifest!.GetStream(track);
-                        offset = stream.FirstTimeStamp - _minTimeStamp;
+                        offset = stream.FirstTimeStamp - _discontinuityInfo!.MinVideoTimestamp;
+                        hasDiscontinuity = stream.HasDiscontinuities();
                     }
 
                     var options = new TransMuxOptions
                     {
                         TrackId = track.TrackId,
                         Channel = track is VideoTrack ? Channel.Video : track is AudioTrack ? Channel.Audio : Channel.Subtitle,
-                        Offset = offset
+                        Offset = offset,
+                        HasDiscontinuity = hasDiscontinuity,
+                        Cmaf = true
                     };
 
                     if (track is TextTrack)
@@ -326,9 +339,9 @@ namespace MediaMigrate.Transform
         {
             // Create a linked CancellationTokenSource which when disposed cancells all tasks.
             using var source = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            // TODO: have absolute timeout.
+
+            // TODO: have absolute timeout configurable.
             source.CancelAfter(TimeSpan.FromHours(1)); 
-            cancellationToken = source.Token;
 
             var (assetName, _, decryptionInfo, manifest, clientManifest) = assetDetails;
             using var decryptor = decryptionInfo == null ? null : new Decryptor(decryptionInfo);
@@ -382,20 +395,23 @@ namespace MediaMigrate.Transform
                 inputs,
                 outputs,
                 manifests,
-                cancellationToken);
+                source.Token).ContinueWith(t =>
+                {
+                    source.CancelAfter(TimeSpan.FromSeconds(5));
+                }, TaskContinuationOptions.OnlyOnRanToCompletion);
             allTasks.Add(task);
             allTasks.AddRange(pipes
                 .Select(async p =>
                 {
                     using (p)
                     {
-                        await p!.RunAsync(cancellationToken);
+                        await p!.RunAsync(source.Token);
                     }
                 }));
 
             try
             {
-                await allTasks.FailFastWaitAll(cancellationToken);
+                await allTasks.FailFastWaitAll(source.Token);
             }
             catch (Exception ex)
             {

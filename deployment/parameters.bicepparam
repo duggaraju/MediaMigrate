@@ -23,6 +23,7 @@ param keyvaultRG = 'provenance'
 //additional arguments.
 param arguments = [
   '-d'
+  '-y'
   '-t'
   '$web/johndeu/\${AssetName}'
 ]

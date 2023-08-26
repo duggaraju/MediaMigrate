@@ -9,16 +9,38 @@ using Media.ISO.Boxes;
 using Microsoft.Extensions.Logging;
 using System.Buffers;
 using System.Text;
+using FFMpegCore.Arguments;
 
 namespace MediaMigrate.Transform
 {
     public record struct TransMuxOptions (
         int TrackId,
-        bool Dash,
+        bool Cmaf,
         bool FastStart,
         Channel Channel,
-        double Offset
+        double Offset,
+        bool HasDiscontinuity
     );
+
+    internal class AudioResample : IAudioFilterArgument
+    {
+        public string Key => "aresample";
+
+        public string Value => "async=1";
+    }
+
+    internal class AudioDelay : IAudioFilterArgument
+    {
+        private double _delay;
+        public AudioDelay(double delay)
+        {
+            _delay = delay;
+        }
+
+        public string Key => "adelay";
+
+        public string Value => $"{_delay}s:all=1";
+    }
 
     internal class TransMuxer
     {
@@ -27,41 +49,6 @@ namespace MediaMigrate.Transform
         public TransMuxer(ILogger<TransMuxer> logger)
         {
             _logger = logger;
-        }
-
-        public async Task<IMediaAnalysis> AnalyzeAsync(Uri uri, CancellationToken cancellationToken)
-        {
-            return await FFProbe.AnalyseAsync(uri, null, cancellationToken);
-        }
-
-        private static void AddMp4MuxingOptions(FFMpegArgumentOptions args, TransMuxOptions options)
-        {
-            args
-                .ForceFormat("mp4")
-                .CopyChannel(options.Channel)
-                .WithCustomArgument(GetCustomArguments(options));
-            if (options.Channel != Channel.Both)
-            {
-                args.SelectStream(0, channel: options.Channel);
-            }
-        }
-
-        private async Task RunFfmpeg(FFMpegArgumentProcessor processor, CancellationToken cancellationToken)
-        {
-            _logger.LogTrace(Events.Ffmpeg, "Running ffmpeg {args}", processor.Arguments);
-            try
-            {
-                await processor
-                    .NotifyOnOutput(line => _logger.LogTrace(Events.Ffmpeg, "{line}", line))
-                .NotifyOnError(line => _logger.LogTrace(Events.Ffmpeg, "{line}", line))
-                .CancellableThrough(cancellationToken)
-                .ProcessAsynchronously(throwOnError: true);
-            }
-            catch(Exception ex)
-            {
-                _logger.LogError(Events.Ffmpeg, ex, "Ffmpeg command failed!");
-                throw;
-            }
         }
 
         public async Task TransmuxUriAsync(Uri uri, MediaStream stream, string filePath, CancellationToken cancellationToken)
@@ -73,7 +60,7 @@ namespace MediaMigrate.Transform
                 .SelectStream(stream.Index, 0)
                 .WithCustomArgument("-movflags faststart");
             });
-            await RunFfmpeg(processor, cancellationToken);
+            await processor.RunAsync(_logger, cancellationToken);
         }
 
         public async Task TransmuxStreamingUriAsync(Uri uri, string filePath, CancellationToken cancellationToken)
@@ -95,17 +82,7 @@ namespace MediaMigrate.Transform
                 options.CopyChannel()
                     .WithCustomArgument("-movflags faststart");
             });
-            await RunFfmpeg(processor, cancellationToken);
-        }
-
-        private static string GetCustomArguments(TransMuxOptions options)
-        {
-            var arguments = string.Empty; //"-avoid_negative_ts make_zero";
-            if (options.Dash)
-                arguments += "-movflags +dash+delay_moov+skip_trailer+skip_sidx+frag_keyframe  -frag_duration 2";
-            else if (options.FastStart)
-                arguments += "-movflags faststart";
-            return arguments;
+            await processor.RunAsync(_logger, cancellationToken);
         }
 
         public async Task TransMuxAsync(IPipeSource source, string destination, TransMuxOptions options, CancellationToken cancellationToken)
@@ -116,8 +93,11 @@ namespace MediaMigrate.Transform
                     if (options.Offset != 0.0)
                         args.WithCustomArgument($"-itsoffset {options.Offset}");
                 })
-                .OutputToFile(destination, overwrite: true, args => AddMp4MuxingOptions(args, options));
-            await RunFfmpeg(processor, cancellationToken);
+                .OutputToFile(
+                    destination,
+                    overwrite: true,
+                    args => args.CopyChannel(options.Channel).AddMp4MuxingOptions(options));
+            await processor.RunAsync(_logger, cancellationToken);
         }
 
         public async Task PipedTransMuxAsync(IPipeSource source, IPipeSink destination, TransMuxOptions options, CancellationToken cancellationToken)
@@ -128,8 +108,10 @@ namespace MediaMigrate.Transform
                     if (options.Offset != 0.0)
                         args.WithCustomArgument($"-itsoffset {options.Offset}");
                 })
-                .OutputToPipe(destination, args => AddMp4MuxingOptions(args, options));
-            await RunFfmpeg(processor, cancellationToken);
+                .OutputToPipe(
+                    destination,
+                    args => args.CopyChannel(options.Channel).AddMp4MuxingOptions(options));
+            await processor.RunAsync(_logger, cancellationToken);
         }
 
         public static async Task SkipAsync(Stream stream, int bytes, CancellationToken cancellationToken)
@@ -299,6 +281,65 @@ namespace MediaMigrate.Transform
                 }
             }
         }
+
+        public async Task TranscodeAudioAsync(Stream source, Stream destination, TransMuxOptions transMuxOptions, CancellationToken cancellationToken)
+        {
+            var input = new StreamPipeSource(source);
+            var output = new StreamPipeSink(destination);
+            await TranscodeAudioAsync(input, output, transMuxOptions, cancellationToken);
+        }
+
+        public async Task TranscodeAudioAsync(IPipeSource input, IPipeSink output, TransMuxOptions transMuxOptions, CancellationToken cancellationToken)
+        {
+            FFMpegArgumentProcessor processor;
+            if (transMuxOptions.Offset > 0.0)
+            {
+                processor = FFMpegArguments
+                .FromPipeInput(input)
+                .OutputToPipe(output, options =>
+                options
+                .WithAudioFilters(
+                    filterOptions =>
+                    {
+                        if (transMuxOptions.HasDiscontinuity)
+                        {
+                            filterOptions.Arguments.Add(new AudioResample());
+                        }
+                        filterOptions.Arguments.Add(new AudioDelay(transMuxOptions.Offset));
+                    }
+                )
+                .WithAudioCodec(AudioCodec.Aac)
+                .AddMp4MuxingOptions(transMuxOptions));
+            }
+            else
+            {
+                if (transMuxOptions.HasDiscontinuity)
+                {
+                    processor = FFMpegArguments
+                    .FromPipeInput(input, opt => opt.Seek(TimeSpan.FromSeconds(Math.Abs(transMuxOptions.Offset))))
+                    .OutputToPipe(output, options =>
+                    options
+                    .ForceFormat("mp4")
+                    .WithAudioFilters(
+                        audioFilterOptions =>
+                        {
+                            audioFilterOptions.Arguments.Add(new AudioResample());
+                        }
+                    )
+                    .WithAudioCodec(AudioCodec.Aac)
+                    .AddMp4MuxingOptions(transMuxOptions));
+                }
+                else
+                {
+                    processor = FFMpegArguments
+                    .FromPipeInput(input, opt => opt.Seek(TimeSpan.FromSeconds(transMuxOptions.Offset)))
+                    .OutputToPipe(
+                        output, 
+                        options => options.CopyChannel(transMuxOptions.Channel).AddMp4MuxingOptions(transMuxOptions));
+                }
+            }
+            await processor.RunAsync(_logger, cancellationToken);
+        }
     }
 
     class TtmlToVttTransmuxer : ChainPipeSource
@@ -368,29 +409,28 @@ namespace MediaMigrate.Transform
 
         public async Task WriteAsync(Stream outputStream, CancellationToken cancellationToken)
         {
-            const int BlockSize = 64 * 1024;
-            var sink = new StreamPipeSink(outputStream)
-            {
-                Format = "mp4",
-                BlockSize = BlockSize
-            };
-            await _transMuxer.PipedTransMuxAsync(_from, sink, _options, cancellationToken);
+            await TransformSource(outputStream, cancellationToken);
         }
 
         public async Task WriteToAsync(string destination, CancellationToken cancellationToken)
         {
-            await _transMuxer.TransMuxAsync(_from, destination, _options, cancellationToken);
+            using var output = File.OpenWrite(destination);
+            await TransformSource(output, cancellationToken);
         }
 
-        protected async Task TransformSource(Stream server, CancellationToken cancellationToken)
+        protected async Task TransformSource(Stream destination, CancellationToken cancellationToken)
         {
             const int BlockSize = 64 * 1024;
-            var sink = new StreamPipeSink(server)
+            var sink = new StreamPipeSink(destination)
             {
                 Format = "mp4",
                 BlockSize = BlockSize
             };
-            using (server)
+            if (_options.Channel == Channel.Audio)
+            {
+                await _transMuxer.TranscodeAudioAsync(_from, sink, _options, cancellationToken);
+            }
+            else
             {
                 await _transMuxer.PipedTransMuxAsync(_from, sink, _options, cancellationToken);
             }

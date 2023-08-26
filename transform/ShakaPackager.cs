@@ -41,7 +41,7 @@ namespace MediaMigrate.Transform
             }
             else if (manifest.IsLiveArchive)
             {
-                return _maxDelta > 0.1;
+                return _discontinuityInfo!.Delta > 0.1 || clientManifest!.HasDiscontinuities();
             }
             return base.NeedsTransMux(manifest, clientManifest);
         }
