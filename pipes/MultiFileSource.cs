@@ -3,26 +3,29 @@ using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Specialized;
 using FFMpegCore.Pipes;
 using Microsoft.Extensions.Logging;
+using MediaMigrate.Transform;
 
 namespace MediaMigrate.Pipes
 {
     // A stream of media track that is spread across multiple files.
-    public class MultiFileSource : IPipeSource
+    internal class MultiFileSource : IPipeSource
     {
+        private readonly TransMuxer? _transMuxer;
         private readonly BlobContainerClient _container;
         private readonly ILogger _logger;
         private readonly MediaStream _track;
         private readonly string _trackPrefix;
 
         public MultiFileSource(
-            BlobContainerClient container,
+            AssetDetails assetDetails,
+            TransMuxer? transMuxer,
             Track track,
-            ClientManifest manifest,
             ILogger logger)
         {
-            _container = container;
+            _container = assetDetails.Container;
             _logger = logger;
-            (_track, _) = manifest.GetStream(track);
+            _transMuxer = transMuxer;
+            (_track, _) = assetDetails.ClientManifest!.GetStream(track);
             _trackPrefix = track.Source;
         }
 
@@ -69,9 +72,11 @@ namespace MediaMigrate.Pipes
             var increment = _track.ChunkCount / 10;
             var currentIncrement = 0;
             var i = 0;
-            foreach (var chunks in _track.GetChunks().Chunk(5))
+            var chunks = _track.GetChunks();
+            var nextChunks = chunks.Skip(1).Concat(Enumerable.Repeat(-1L, 1));
+            foreach (var batch in chunks.Zip(nextChunks).Chunk(5))
             {
-                var data = await Task.WhenAll(chunks.Select(async c => await DownloadChunkAsync(c, cancellationToken)));
+                var data = await Task.WhenAll(batch.Select(async c => await DownloadChunkAsync(c.First, cancellationToken)));
                 i += data.Length;
                 if (i >= currentIncrement)
                 {
@@ -79,9 +84,16 @@ namespace MediaMigrate.Pipes
                     currentIncrement += increment;
                 }
 
-                foreach (var d in data.Where(d => d != null))
+                foreach (var chunk in data.Zip(batch).Where(c => c.First != null))
                 {
-                    await stream.WriteAsync(d!.ToMemory(), cancellationToken);
+                    if (_transMuxer != null)
+                    {
+                        await _transMuxer.TransmuxLiveFragment(chunk.First!.ToStream(), stream, (ulong)_track.Chunks[0].Time, chunk.Second.Second, cancellationToken);
+                    }
+                    else
+                    {
+                        await stream.WriteAsync(chunk.First!.ToMemory(), cancellationToken);
+                    }
                 }
             }
             _logger.LogDebug("Finished downloading track {prefix}", _trackPrefix);

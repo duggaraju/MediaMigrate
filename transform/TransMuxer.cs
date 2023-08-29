@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging;
 using System.Buffers;
 using System.Text;
 using FFMpegCore.Arguments;
+using MediaMigrate.Utils;
 
 namespace MediaMigrate.Transform
 {
@@ -114,43 +115,6 @@ namespace MediaMigrate.Transform
             await processor.RunAsync(_logger, cancellationToken);
         }
 
-        public static async Task SkipAsync(Stream stream, int bytes, CancellationToken cancellationToken)
-        {
-            var memoryPool = MemoryPool<byte>.Shared;
-            if (stream.CanSeek)
-            {
-                stream.Position += bytes;
-            }
-            else
-            {
-                var minSize = Math.Min(bytes, 64 * 1024);
-                using var memory = memoryPool.Rent(minSize);
-                while (bytes > 0)
-                {
-                    var buffer = memory.Memory.Slice(0, Math.Min(minSize, bytes));
-                    bytes -= await stream.ReadAsync(buffer, cancellationToken);
-                }
-            }
-        }
-
-        public static async Task<int> ReadExactAsync(Stream stream, Memory<byte> memory, CancellationToken cancellationToken)
-        {
-            var bytes = memory.Length;
-            var bytesRead = 0;
-            while (bytes > 0)
-            {
-                var read = await stream.ReadAsync(memory, cancellationToken);
-                if (read == 0)
-                {
-                    break;
-                }
-                memory = memory.Slice(read);
-                bytesRead += read;
-                bytes -= read;
-            }
-            return bytesRead;
-        }
-
         static readonly TimeSpan MilliSecond = TimeSpan.FromMilliseconds(1);
 
         public async Task TransMuxTTMLAsync(Stream input, Stream output, TransMuxOptions options, CancellationToken cancellationToken)
@@ -181,7 +145,7 @@ namespace MediaMigrate.Transform
                 {
                     using var memory = pool.Rent(size);
                     var buffer = memory.Memory.Slice(0, size);
-                    await ReadExactAsync(input, buffer, cancellationToken);
+                    await input.ReadExactAsync(buffer, cancellationToken);
                     var stream = buffer.AsStream();
                     var captions = TtmlCaptions.Parse(stream, _logger);
                     foreach (var caption in captions.Body.Captions)
@@ -204,7 +168,90 @@ namespace MediaMigrate.Transform
                 }
                 else
                 {
-                    await SkipAsync(input, size, cancellationToken);
+                    await input.SkipAsync(size, cancellationToken);
+                }
+            }
+        }
+
+        public async Task TransmuxLiveFragment(Stream source, Stream destination, ulong timeOffset, long nextChunkTime, CancellationToken cancellationToken)
+        {
+            var pool = MemoryPool<byte>.Shared;
+            var header = new byte[8];
+            while (true)
+            {
+                var bytes = await source.ReadExactAsync(header.AsMemory(), cancellationToken);
+                if (bytes == 0) break;
+                var box = BoxFactory.Parse(header.AsSpan());
+                if (!Enum.IsDefined(box.Type))
+                {
+                    _logger.LogError("Unknown box type {type}. Malfored Smooth media", box.Type);
+                    throw new InvalidDataException($"Malformed Smooth asset. Unknown box type {box.Type}");
+                }
+
+                _logger.LogTrace(Events.TransMuxer, "Found Box {type} size {size}", box.Type.GetBoxName(), box.Size);
+                var boxSize = (int)box.Size;
+
+                using var memory = pool.Rent(boxSize);
+                var buffer = memory.Memory.Slice(0, boxSize);
+                header.CopyTo(buffer);
+                await source.ReadExactAsync(buffer.Slice(8), cancellationToken);
+
+                if (box.Type == BoxType.UuidBox)
+                {
+                    // skip smooth specific uuid boxes.
+                    continue;
+                }
+                else if (box.Type == BoxType.MovieFragmentBox)
+                {
+                    var stream = buffer.AsStream();
+                    var moof = (MovieFragmentBox)BoxFactory.Parse(new BoxReader(stream));
+                    var track = moof.Tracks.Single();
+                    var theader = track.GetSingleChild<TrackFragmentHeaderBox>();
+
+                    // Always set version to 1 due to bug in old smooth content.
+                    var trun = track.GetSingleChild<TrackFragmentRunBox>();
+                    trun.Version = 1;
+
+                    // Check for smooth specific box if present.
+                    var tfxd = track.GetChildren<TrackFragmentExtendedHeaderBox>().SingleOrDefault();
+                    if (tfxd != null)
+                    {
+                        var tfdt = new TrackFragmentDecodeTimeBox
+                        {
+                            BaseMediaDecodeTime = tfxd.Time - timeOffset,
+                            Version = 1
+                        };
+                        tfdt.ComputeSize();
+                        track.Children.Remove(tfxd);
+                        track.Children.Insert(1, tfdt);
+
+                        // update the base data offset after inserting/removing boxes.
+                        if ((trun.Flags & TrackFragmentRunBox.DataOffsetPresent) != 0)
+                        {
+                            trun.DataOffset -= (int)(tfxd.Size - tfdt.Size);
+                        }
+
+                        if (nextChunkTime != -1 &&
+                            tfxd.Time + tfxd.Duration < (ulong)nextChunkTime &&
+                            (trun.Flags & TrackFragmentRunBox.SampleDurationPresent) != 0)
+                        {
+                            var duration = trun.Samples.Sum(s => s.Duration ?? 0);
+                            var lastSample = trun.Samples[trun.SampleCount - 1];
+                            lastSample.Duration += (uint)((ulong)nextChunkTime - tfxd.Time);
+                            trun.Samples[trun.SampleCount - 1] = lastSample;
+                        }
+                        moof.ComputeSize();
+                    }
+
+                    boxSize = (int)moof.Size;
+                    using var newMoof = pool.Rent(boxSize);
+                    var target = newMoof.Memory.AsStream();
+                    moof.Write(target);
+                    await destination.WriteAsync(newMoof.Memory.Slice(0, boxSize), cancellationToken);
+                }
+                else
+                {
+                    await destination.WriteAsync(buffer, cancellationToken);
                 }
             }
         }
@@ -214,9 +261,10 @@ namespace MediaMigrate.Transform
             var pool = MemoryPool<byte>.Shared;
             var header = new byte[8];
             var skip = false;
+            var timeOffset = 0ul;
             while (true)
             {
-                var bytes = await ReadExactAsync(source, header.AsMemory(), cancellationToken);
+                var bytes = await source.ReadExactAsync(header.AsMemory(), cancellationToken);
                 if (bytes == 0) break;
                 var box = BoxFactory.Parse(header.AsSpan());
                 if (!Enum.IsDefined(box.Type))
@@ -234,14 +282,18 @@ namespace MediaMigrate.Transform
                 if (box.Type == BoxType.MovieFragmentRandomAccessBox)
                 {
                     _logger.LogTrace(Events.TransMuxer, "Skipping box {type} size {size}", box.Type, box.Size);
-                    await SkipAsync(source, size - 8, cancellationToken);
+                    await source.SkipAsync(size - 8, cancellationToken);
                     continue;
                 }
                 using var memory = pool.Rent((int)box.Size);
                 var buffer = memory.Memory.Slice(0, size);
                 header.CopyTo(buffer);
-                await ReadExactAsync(source, buffer.Slice(8), cancellationToken);
-                if (box.Type == BoxType.MovieFragmentBox)
+                await source.ReadExactAsync(buffer.Slice(8), cancellationToken);
+                if (box.Type == BoxType.UuidBox)
+                {
+                    await source.SkipAsync(size - 8, cancellationToken);
+                }
+                else if (box.Type == BoxType.MovieFragmentBox)
                 {
                     var stream = buffer.AsStream();
                     var moof = (MovieFragmentBox)BoxFactory.Parse(new BoxReader(stream));
@@ -260,20 +312,36 @@ namespace MediaMigrate.Transform
                     // Always set version to 1 due to bug in old smooth content.
                     var trun = track.GetSingleChild<TrackFragmentRunBox>();
                     trun.Version = 1;
+
+                    // Check for smooth specific box if present.
                     var tfxd = track.GetChildren<TrackFragmentExtendedHeaderBox>().SingleOrDefault();
                     if (tfxd != null)
                     {
-                        var tfdt = new TrackFragmentDecodeTimeBox();
-                        tfdt.BaseMediaDecodeTime = tfxd.Time;
+                        if (timeOffset == 0)
+                        {
+                            timeOffset = tfxd.Time;
+                        }
+                        var tfdt = new TrackFragmentDecodeTimeBox
+                        {
+                            BaseMediaDecodeTime = tfxd.Time - timeOffset
+                        };
+                        tfdt.ComputeSize();
                         track.Children.Remove(tfxd);
-                        track.Children.Insert(0, tfdt);
+                        track.Children.Insert(1, tfdt);
+
+                        // update the base data offset after inserting/removing boxes.
+                        if ((trun.Flags & TrackFragmentRunBox.DataOffsetPresent) != 0)
+                        {
+                            trun.DataOffset -= (int) (tfxd.Size - tfdt.Size);
+                        }
+                        moof.ComputeSize();
                     }
-                    moof.ComputeSize();
+
                     var newSize = (int) moof.Size;
                     using var newMoof = pool.Rent(newSize);
                     var target = newMoof.Memory.AsStream();
                     moof.Write(target);
-                    await destination.WriteAsync(newMoof.Memory.Slice(0, newSize));
+                    await destination.WriteAsync(newMoof.Memory.Slice(0, newSize), cancellationToken);
                 }
                 else if (!skip)
                 {

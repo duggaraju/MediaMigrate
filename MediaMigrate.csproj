@@ -28,9 +28,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="AWSSDK.MediaConvert" Version="3.7.201.12" />
-    <PackageReference Include="AWSSDK.S3" Version="3.7.201.13" />
-    <PackageReference Include="Azure.Identity" Version="1.9.0" />
+    <PackageReference Include="AWSSDK.MediaConvert" Version="3.7.202.2" />
+    <PackageReference Include="AWSSDK.S3" Version="3.7.203.2" />
+    <PackageReference Include="Azure.Identity" Version="1.10.0" />
     <PackageReference Include="Azure.Monitor.Query" Version="1.2.0" />
     <PackageReference Include="Azure.ResourceManager.Media" Version="1.2.0" />
     <PackageReference Include="Azure.ResourceManager.Storage" Version="1.1.1" />
@@ -45,7 +45,7 @@
     <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.19.5" />
     <PackageReference Include="Microsoft.XmlSerializer.Generator" Version="7.0.0" />
     <PackageReference Include="Mono.Posix.NETStandard" Version="1.0.0" />
-    <PackageReference Include="Mp4.Parser" Version="1.0.3" />
+    <PackageReference Include="Mp4.Parser" Version="1.0.4" />
     <PackageReference Include="Serilog" Version="3.0.1" />
     <PackageReference Include="Serilog.Expressions" Version="3.4.1" />
     <PackageReference Include="Serilog.Extensions.Logging" Version="7.0.0" />

@@ -95,6 +95,8 @@ namespace MediaMigrate.Contracts
 
         public string Format => Metadata.SingleOrDefault(s => s.Name == "formats")?.Value ?? "fmp4";
 
+        public bool IsSmooth => Format == "fmp4";
+
         public bool IsLiveArchive => Format == "vod-cmaf" || Format == "vod-fmp4";
 
         public bool IsLive => Format == "ll-cmaf" || Format == "live-fmp4";
@@ -118,8 +120,7 @@ namespace MediaMigrate.Contracts
             {
                 logger.LogTrace("Unknown attribute in manifest {args}", args.Attr.Name);
             };
-            var manifest = serializer.Deserialize(new StreamReader(stream, Encoding.UTF8)) as Manifest;
-            if (manifest == null) throw new ArgumentException("Invalid data", nameof(stream));
+            var manifest = serializer.Deserialize(new StreamReader(stream, Encoding.UTF8)) as Manifest ?? throw new ArgumentException("Invalid data", nameof(stream));
             manifest.FileName = filename;
             return manifest;
         }

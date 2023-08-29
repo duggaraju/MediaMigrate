@@ -2,7 +2,7 @@
   "profiles": {
     "MediaMigrate": {
       "commandName": "Project",
-      "commandLineArgs": "assets -s b2c12710-ecdf-4532-9ba6-7e74a219b5f2 -g pohhsuTest -n pohhsumediaservice -a uploaded-d642583dcf --skip-migrated false -t \"$web/bug/${AssetName}\" -o amsencodermsitest"
+      "commandLineArgs": "assets -s b2c12710-ecdf-4532-9ba6-7e74a219b5f2 -g pohhsuTest -n pohhsumediaservice -a uploaded-d642583dcf --skip-migrated false -t \"$web/bug/${AssetName}\" -o amsencodermsitest -y"
     },
     "Docker": {
       "commandName": "Docker",

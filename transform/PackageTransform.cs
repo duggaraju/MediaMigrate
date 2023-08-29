@@ -30,8 +30,16 @@ namespace MediaMigrate.Transform
                     var blobs = await details.Container.GetListOfBlobsAsync(cancellationToken);
                     return blobs.Count() == 1;
                 }
-                _logger.LogDebug("Packaging asset {asset} without manifest is not supported!", details.AssetName);
+                _logger.LogDebug("Packaging of asset {asset} without manifest (.ism) is not supported!", details.AssetName);
                 return false;
+            }
+
+            if (details.ClientManifest != null)
+            {
+                if (details.ClientManifest.Streams.Any(s => s.Type == StreamType.Audio && s.HasDiscontinuities()))
+                {
+                    _logger.LogWarning("Audio stream in asset {asset} has discontinuities and will be transcoded to fill silence.", details.AssetName);
+                }
             }
 
             return true;

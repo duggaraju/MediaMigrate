@@ -8,6 +8,14 @@ using System.Text.RegularExpressions;
 
 namespace MediaMigrate.Transform
 {
+    enum TextTrackRole
+    {
+        Main,
+        Alternate,
+        Supplementary
+    }
+
+
     internal class ShakaPackager : BasePackager
     {
         static readonly string PackagerPath = AppContext.BaseDirectory;
@@ -28,10 +36,6 @@ namespace MediaMigrate.Transform
             return prefix + suffix;
         }
 
-        // Shaka packager cannot handle smooth input.
-        protected override FileType GetInputFileType(Manifest manifest) 
-            => manifest.IsLiveArchive ? FileType.File : base.GetInputFileType(manifest);
-
         protected override bool NeedsTransMux(Manifest manifest, ClientManifest? clientManifest)
         {
             if (manifest.Format == "fmp4")
@@ -48,7 +52,7 @@ namespace MediaMigrate.Transform
 
         protected override FileType GetOutputFileType(Manifest manifest)
         {
-            // known hang on linux and windows not supported.
+            // known issue on windows, not supported.
             return RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? FileType.File : base.GetOutputFileType(manifest);
         }
 
@@ -58,6 +62,8 @@ namespace MediaMigrate.Transform
             var manifest = details.Manifest!;
             var drm_label = _options.EncryptContent ? $",drm_label={EncryptionLabel}" : string.Empty;
             var i = 0;
+            var text_tracks = 0;
+            var values = Enum.GetValues<TextTrackRole>();
             var arguments = inputs
                 .SelectMany(item =>
                 {
@@ -65,9 +71,10 @@ namespace MediaMigrate.Transform
                     {
                         var ext = track.IsMultiFile ? MEDIA_FILE : string.Empty;
                         var stream = track.Type.ToString().ToLowerInvariant();
-                        var language = string.IsNullOrEmpty(track.SystemLanguage) || track.SystemLanguage == "und" ? string.Empty : $"language={track.SystemLanguage}";
-                        var label = track is TextTrack ? string.Empty: drm_label;
-                        return $"stream={stream},in={item.FilePath},out={outputs[i].FilePath},playlist_name={manifests[i++].FilePath},{language}{label}";
+                        var language = string.IsNullOrEmpty(track.SystemLanguage) || track.SystemLanguage == "und" ? string.Empty : $",language={track.SystemLanguage}";
+                        var encryption = track is TextTrack ? string.Empty: drm_label;
+                        var role = track is TextTrack ? $",dash_role={values[text_tracks++ % values.Length].ToString().ToLowerInvariant()}" : string.Empty;
+                        return $"stream={stream},in={item.FilePath},out={outputs[i].FilePath},playlist_name={manifests[i++].FilePath}{language}{encryption}{role}";
                     });
                 }).ToList();
 

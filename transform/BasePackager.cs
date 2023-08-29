@@ -128,13 +128,14 @@ namespace MediaMigrate.Transform
 
                 var item = inputs.Find(i => i.File == file);
                 // for now workaround for smooth input till shaka packager fix goes in.
-                if (item == default || manifest.Format == "fmp4")
+                if (item == default || manifest.IsSmooth)
                 {
+                    var suffix = manifest.IsSmooth ? $"_{track.TrackId}": string.Empty;
                     var input = new PackagerInput(file, fileType, transMux, new List<Track> { track })
                     {
                         FilePath = Path.Combine(
                             workingDirectory,
-                            manifest.Format == "fmp4" ? $"{Path.GetFileNameWithoutExtension(file)}_{track.TrackId}{Path.GetExtension(file)}" : file)
+                            manifest.Format == "fmp4" ? $"{Path.GetFileNameWithoutExtension(file)}{suffix}{Path.GetExtension(file)}" : file)
                     };
                     inputs.Add(input);
                 }
@@ -228,15 +229,14 @@ namespace MediaMigrate.Transform
             }
         }
 
-
-        public IPipeSource GetInputSource(AssetDetails assetDetails, PackagerInput input)
+        private IPipeSource GetInputSource(AssetDetails assetDetails, PackagerInput input)
         {
             var tracks = input.Tracks;
             IPipeSource source;
             if (tracks.Count == 1 && tracks[0].IsMultiFile)
             {
                 var track = tracks[0];
-                source = new MultiFileSource(assetDetails.Container, track, assetDetails.ClientManifest!, _logger);
+                source = new MultiFileSource(assetDetails, input.TransMux ? _transMuxer : null, track, _logger);
             }
             else
             {
@@ -272,9 +272,14 @@ namespace MediaMigrate.Transform
                     }
                     else
                     {
-                        source = assetDetails.Manifest.IsLiveArchive ?
-                            new FfmpegIsmvToMp4Muxer(_transMuxer, source, options) :
-                            new IsmvToCmafMuxer(_transMuxer, source, options, _logger);
+                        if (assetDetails.Manifest.IsSmooth)
+                        {
+                            source = new IsmvToCmafMuxer(_transMuxer, source, options, _logger);
+                        }
+                        else if (track is AudioTrack && hasDiscontinuity)
+                        {
+                            source = new FfmpegIsmvToMp4Muxer(_transMuxer, source, options);
+                        }
                     }
                 }
                 else
@@ -291,7 +296,7 @@ namespace MediaMigrate.Transform
             return source;
         }
 
-        public IPipeSink GetOutputSink(
+        private IPipeSink GetOutputSink(
             PackagerOutput output,
             IFileUploader uploader)
         {
