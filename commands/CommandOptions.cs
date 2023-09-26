@@ -142,7 +142,7 @@ e.g: For Azure specify the storage account name or the URL <https://accountname.
             description: @"The URI for the key to put in the manifest.  This should be a template");
 
         private static readonly Option<bool> _usePipes = new(
-            aliases: new[] { "--use-pipes", "-p" },
+            aliases: new[] { "--use-pipes" },
             () => true,
             description: @"Use pipes for storage. Default is true but can be disabled if you hit errors.
             For example MP4 content with 'moov' box at the end cannot be used with pipes");

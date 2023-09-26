@@ -5,6 +5,8 @@ using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using Azure.Storage.Blobs.Specialized;
 using Microsoft.Extensions.Logging;
+using Azure.Storage.Sas;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace MediaMigrate.Azure
 {
@@ -14,11 +16,13 @@ namespace MediaMigrate.Azure
         private readonly BlobContainerClient _container;
         private readonly StorageOptions _options;
         private readonly string _prefix;
+        private readonly IMemoryCache _cache;
 
-        public AzureFileUploader(BlobContainerClient container, string prefix, StorageOptions otions, ILogger logger)
+        public AzureFileUploader(IMemoryCache cache, BlobContainerClient container, string prefix, StorageOptions options, ILogger logger)
         {
+            _cache = cache;
             _container = container;
-            _options = otions;
+            _options = options;
             _logger = logger;
             _prefix = prefix;
         }
@@ -26,7 +30,7 @@ namespace MediaMigrate.Azure
         public async Task UploadAsync(
             string fileName,
             Stream content,
-            ContentHeaders headers, 
+            ContentHeaders headers,
             IProgress<long> progress,
             CancellationToken cancellationToken)
         {
@@ -59,9 +63,55 @@ namespace MediaMigrate.Azure
             CancellationToken cancellationToken)
         {
             var outputBlob = _container.GetBlockBlobClient(_prefix + fileName);
-            var operation = await outputBlob.StartCopyFromUriAsync(blob.Uri, cancellationToken: cancellationToken);
+            var uri = await GetCopyUriAsync(blob, cancellationToken);
+            var operation = await outputBlob.StartCopyFromUriAsync(uri, cancellationToken: cancellationToken);
             await operation.WaitForCompletionAsync(cancellationToken);
             _logger.LogDebug("Finished uploading {name} to {file}", blob.Name, fileName);
+        }
+
+        private async Task<UserDelegationKey?> GetUserDelegationKey(BlobServiceClient client, CancellationToken cancellationToken)
+        {
+            return await _cache.GetOrCreateAsync(client.AccountName, async entry =>
+            {
+                var now = DateTimeOffset.UtcNow;
+                entry.SetAbsoluteExpiration(TimeSpan.FromMinutes(2));
+                var response = await client.GetUserDelegationKeyAsync(now.AddSeconds(-10), now.AddHours(2), cancellationToken);
+                return response.Value;
+            });
+        }
+
+        private async Task<Uri> GetCopyUriAsync(BlockBlobClient blob, CancellationToken cancellationToken)
+        {
+            if (blob.CanGenerateSasUri)
+            {
+                return blob.Uri;
+            }
+
+            var client = blob.GetParentBlobContainerClient().GetParentBlobServiceClient();
+            var delegationKey = await GetUserDelegationKey(client, cancellationToken) 
+                ?? throw new InvalidOperationException("Could not create delgation key"); ;
+
+            // Create a SAS token for the blob resource
+            var sasBuilder = new BlobSasBuilder()
+            {
+                BlobContainerName = blob.BlobContainerName,
+                BlobName = blob.Name,
+                Resource = "b",
+                StartsOn = DateTimeOffset.UtcNow,
+                ExpiresOn = DateTimeOffset.UtcNow.AddMinutes(5)
+            };
+
+            // Specify the necessary permissions
+            sasBuilder.SetPermissions(BlobSasPermissions.Read);
+
+            // Add the SAS token to the blob URI
+            var uriBuilder = new BlobUriBuilder(blob.Uri)
+            {
+                // Specify the user delegation key
+                Sas = sasBuilder.ToSasQueryParameters(delegationKey, client.AccountName)
+            };
+
+            return uriBuilder.ToUri();
         }
     }
 
@@ -70,13 +120,16 @@ namespace MediaMigrate.Azure
         private readonly StorageOptions _options;
         private readonly ILogger _logger;
         private readonly BlobServiceClient _blobServiceClient;
+        private readonly IMemoryCache _cache;
 
         public AzureStorageUploader(
             StorageOptions options,
+            IMemoryCache cache,
             TokenCredential credential,
             ILogger<AzureStorageUploader> logger)
         {
             _options = options;
+            _cache = cache;
             _logger = logger;
             if (!Uri.TryCreate(options.StoragePath, UriKind.Absolute, out var storageUri))
             {
@@ -98,7 +151,7 @@ namespace MediaMigrate.Azure
                 await container.CreateIfNotExistsAsync(cancellationToken: cancellationToken);
             }
 
-            return new AzureFileUploader(container, prefix, _options, _logger);
+            return new AzureFileUploader(_cache, container, prefix, _options, _logger);
         }
     }
 }

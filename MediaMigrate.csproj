@@ -18,7 +18,7 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryUrl>https://github.com/duggaraju/MediaMigrate</RepositoryUrl>
     <PackageTags>Media;Migration;AMS;Azure;Media;Services;MediaMigrate;AWS;S3;Storage</PackageTags>
-    <Version>1.2.3</Version>
+    <Version>1.2.4</Version>
     <CheckForOverflowUnderflow>True</CheckForOverflowUnderflow>
     <ShakaUrl>https://github.com/shaka-project/shaka-packager/releases/download/v2.6.1/</ShakaUrl>
   </PropertyGroup>
@@ -28,17 +28,18 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="AWSSDK.MediaConvert" Version="3.7.202.2" />
-    <PackageReference Include="AWSSDK.S3" Version="3.7.203.2" />
-    <PackageReference Include="Azure.Identity" Version="1.10.0" />
+    <PackageReference Include="AWSSDK.MediaConvert" Version="3.7.203.1" />
+    <PackageReference Include="AWSSDK.S3" Version="3.7.205" />
+    <PackageReference Include="Azure.Identity" Version="1.10.1" />
     <PackageReference Include="Azure.Monitor.Query" Version="1.2.0" />
     <PackageReference Include="Azure.ResourceManager.Media" Version="1.2.0" />
     <PackageReference Include="Azure.ResourceManager.Storage" Version="1.1.1" />
     <PackageReference Include="Azure.Security.KeyVault.Secrets" Version="4.5.0" />
-    <PackageReference Include="Azure.Storage.Blobs" Version="12.17.0" />
+    <PackageReference Include="Azure.Storage.Blobs" Version="12.18.0" />
     <PackageReference Include="CommunityToolkit.HighPerformance" Version="8.2.1" />
     <PackageReference Include="FFMpegCore" Version="5.1.0" />
     <PackageReference Include="Google.Cloud.Storage.V1" Version="4.6.0" />
+    <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="7.0.0" />
     <PackageReference Include="Microsoft.Extensions.Logging" Version="7.0.0" />
     <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="7.0.0" />
     <PackageReference Include="Microsoft.Extensions.Logging.TraceSource" Version="7.0.0" />
@@ -56,7 +57,7 @@
     <PackageReference Include="System.CommandLine.NamingConventionBinder" Version="2.0.0-beta4.22272.1" />
     <PackageReference Include="System.Text.RegularExpressions" Version="4.3.1" />
     <PackageReference Include="System.Threading.Channels" Version="7.0.0" />
-    <PackageReference Include="vertical-spectreconsolelogger" Version="0.10.1-dev.20230712.19" />
+    <PackageReference Include="vertical-spectreconsolelogger" Version="0.10.1-dev.20230901.27" />
   </ItemGroup>
   <ItemGroup>
     <DotNetCliToolReference Include="Microsoft.XmlSerializer.Generator" Version="7.0.0" />

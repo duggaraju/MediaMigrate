@@ -90,6 +90,7 @@ namespace MediaMigrate
         public static void RegisterServices(this IServiceCollection services)
         {
             services
+                .AddMemoryCache()
                 .AddSingleton(CreateConsole)
                 .AddSingleton(GetCredential())
                 .AddSingleton<AssetAnalyzer>()
